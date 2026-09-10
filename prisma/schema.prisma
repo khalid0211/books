@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Switch this to "postgresql" and update DATABASE_URL in .env to move to Postgres.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id              Int      @id @default(autoincrement())
+  title           String
+  authors         String // free text; comma-separate multiple authors
+  isbn10          String?
+  isbn13          String?
+  publisher       String?
+  publicationDate String? // ISO date string "YYYY-MM-DD" (kept as text for simple form handling)
+  edition         String?
+  language        String?
+  pageCount       Int?
+  tags            String? // comma-separated
+  format          String? // hardcover | paperback | ebook | audiobook | other
+  shelfLocation   String?
+  dateAcquired    String? // ISO date string "YYYY-MM-DD"
+  price           Float?
+  rating          Int? // 1-5
+  coverImageUrl   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([title])
+  @@index([authors])
+}
