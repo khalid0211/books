@@ -11,31 +11,37 @@ type Props = {
 type Controls = { stop: () => void; switchTorch?: (on: boolean) => Promise<void> };
 type StillReader = { decodeFromImageUrl: (url: string) => Promise<{ getText: () => string }> };
 
+/** `zoom` isn't in the TS MediaTrack types yet. */
+function zoomConstraint(z: number): MediaTrackConstraints {
+  return { advanced: [{ zoom: z }] } as unknown as MediaTrackConstraints;
+}
+
 export default function IsbnScanner({ onDetected, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<Controls | null>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
   const stillReaderRef = useRef<StillReader | null>(null);
   const doneRef = useRef(false);
 
   const [status, setStatus] = useState("Starting camera…");
+  const [ready, setReady] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [canTorch, setCanTorch] = useState(false);
+  const [zoom, setZoom] = useState<number | null>(null);
+  const [zoomRange, setZoomRange] = useState<{ min: number; max: number; step: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState("");
 
   useEffect(() => {
     const secure = typeof window !== "undefined" && window.isSecureContext;
     const hasCam = !!navigator.mediaDevices?.getUserMedia;
-
     if (!secure) {
-      setFatal(
-        "The camera needs a secure (HTTPS) connection. Start the server with `npm run dev:https` and open the https:// address on your phone — or type the ISBN below.",
-      );
+      setFatal("The camera needs an HTTPS connection. Run `npm run dev:https` and open the https:// address — or type the ISBN below.");
       return;
     }
     if (!hasCam) {
-      setFatal("This browser can't reach the camera. Type the ISBN below instead.");
+      setFatal("This browser can't reach the camera. Type the ISBN below.");
       return;
     }
 
@@ -48,58 +54,67 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
           import("@zxing/library"),
         ]);
 
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        const still = new Map();
+        still.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8,
           BarcodeFormat.UPC_A,
           BarcodeFormat.UPC_E,
         ]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
+        still.set(DecodeHintType.TRY_HARDER, true);
+        stillReaderRef.current = new BrowserMultiFormatReader(still) as unknown as StillReader;
 
-        stillReaderRef.current = new BrowserMultiFormatReader(hints) as unknown as StillReader;
-
-        const reader = new BrowserMultiFormatReader(hints, {
-          delayBetweenScanAttempts: 150,
-          delayBetweenScanSuccess: 500,
-        });
-
-        const constraints: MediaStreamConstraints = {
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            // @ts-expect-error focusMode is not in the TS lib yet
-            advanced: [{ focusMode: "continuous" }],
-          },
-        };
+        // Continuous reader: EAN-13 only, no TRY_HARDER, so it keeps up with the video.
+        const live = new Map();
+        live.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13]);
+        const reader = new BrowserMultiFormatReader(live, { delayBetweenScanAttempts: 100 });
 
         if (cancelled) return;
-        setStatus("Line the barcode up in the box, then tap “Capture & read”");
+        setStatus("Fill the box with the barcode, then tap “Capture & read”");
 
         const controls = (await reader.decodeFromConstraints(
-          constraints,
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
           videoRef.current!,
           (result) => {
-            if (doneRef.current || !result) return;
-            handleText(result.getText());
+            if (!doneRef.current && result) handleText(result.getText());
           },
         )) as unknown as Controls;
         controlsRef.current = controls;
 
-        const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.()[0];
-        const caps = track?.getCapabilities?.() as { torch?: boolean } | undefined;
-        if (caps?.torch || typeof controls.switchTorch === "function") setCanTorch(true);
+        const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.()[0] ?? null;
+        trackRef.current = track;
+        const caps = (track?.getCapabilities?.() ?? {}) as {
+          torch?: boolean;
+          zoom?: { min: number; max: number; step?: number };
+        };
+        if (caps.torch || typeof controls.switchTorch === "function") setCanTorch(true);
+        if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+          const start = Math.min(2, caps.zoom.max);
+          setZoomRange({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 });
+          try {
+            await track!.applyConstraints(zoomConstraint(start));
+            setZoom(start);
+          } catch {
+            setZoom(caps.zoom.min);
+          }
+        }
+        setReady(true);
       } catch (err) {
         if (cancelled) return;
         const name = err instanceof DOMException ? err.name : "";
         setFatal(
           name === "NotAllowedError"
-            ? "Camera permission was denied. Tap the padlock in the address bar → Site settings → Camera → Allow, then reopen the scanner. Or type the ISBN below."
+            ? "Camera permission denied. Tap the padlock → Site settings → Camera → Allow, then reopen. Or type the ISBN below."
             : name === "NotFoundError"
-              ? "No camera was found on this device. Type the ISBN below."
-              : "Could not start the camera. Type the ISBN below instead.",
+              ? "No camera found on this device. Type the ISBN below."
+              : `Could not start the camera (${(err as Error)?.message || name || "unknown"}). Type the ISBN below.`,
         );
       }
     })();
@@ -126,7 +141,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
       finish(isbn);
       return true;
     }
-    setStatus(`Read "${raw}" — that is not an ISBN. Try again.`);
+    setStatus(`Read "${raw}" — not an ISBN. Try again.`);
     return false;
   }
 
@@ -137,40 +152,39 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
       const res = await reader.decodeFromImageUrl(url);
       return handleText(res.getText());
     } catch {
-      return false;
+      return false; // NotFoundException — no barcode in this image
     }
   }
 
-  /** Grab the current frame and decode it — the explicit "shutter" action. */
-  async function capture() {
+  function frameToUrl(cropFactor: number): string | null {
     const video = videoRef.current;
-    if (!video || !video.videoWidth || busy || doneRef.current) return;
+    if (!video || !video.videoWidth) return null;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const cw = Math.round(vw * cropFactor);
+    const ch = Math.round(vh * cropFactor);
+    const sx = Math.round((vw - cw) / 2);
+    const sy = Math.round((vh - ch) / 2);
+    const scale = Math.min(2, 1600 / Math.max(cw, ch));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(cw * scale);
+    canvas.height = Math.round(ch * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.95);
+  }
+
+  async function capture() {
+    if (busy || doneRef.current) return;
     setBusy(true);
     setStatus("Reading…");
     try {
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      // 1) Centre band, magnified 2x (mimics the guide box, helps small barcodes).
-      const cw = Math.round(vw * 0.92);
-      const ch = Math.round(vh * 0.4);
-      const sx = Math.round((vw - cw) / 2);
-      const sy = Math.round((vh - ch) / 2);
-      canvas.width = cw * 2;
-      canvas.height = ch * 2;
-      ctx.drawImage(video, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
-      if (await decodeUrl(canvas.toDataURL("image/png"))) return;
-
-      // 2) Whole frame as a fallback.
-      canvas.width = vw;
-      canvas.height = vh;
-      ctx.drawImage(video, 0, 0, vw, vh);
-      if (await decodeUrl(canvas.toDataURL("image/png"))) return;
-
-      setStatus("Couldn't read it. Fill the box with the barcode, hold steady, add light, and tap again.");
+      for (const factor of [0.55, 0.8, 1]) {
+        const url = frameToUrl(factor);
+        if (url && (await decodeUrl(url))) return;
+      }
+      setStatus("Couldn't read it. Get closer so the barcode is sharp and fills the box, add light, tap again.");
     } finally {
       setBusy(false);
     }
@@ -185,11 +199,20 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     const url = URL.createObjectURL(file);
     try {
       if (!(await decodeUrl(url))) {
-        setStatus("No barcode found in that photo. Get closer so the barcode is sharp and fills the frame.");
+        setStatus("No barcode found in that photo. Retake it closer, with the barcode sharp and level.");
       }
     } finally {
       URL.revokeObjectURL(url);
       setBusy(false);
+    }
+  }
+
+  async function changeZoom(v: number) {
+    setZoom(v);
+    try {
+      await trackRef.current?.applyConstraints(zoomConstraint(v));
+    } catch {
+      /* ignore */
     }
   }
 
@@ -212,7 +235,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white">
       <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm font-medium">Scan ISBN</span>
+        <span className="text-sm font-medium">Scan ISBN {ready ? "" : "· loading…"}</span>
         <div className="flex items-center gap-2">
           {canTorch && (
             <button
@@ -229,22 +252,36 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
       </div>
 
       {!fatal && (
-        <div className="relative flex-1">
-          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
+        <div className="relative flex-1 bg-black">
+          <video ref={videoRef} playsInline muted className="h-full w-full object-contain" />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-2/5 w-11/12 max-w-sm rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+            <div className="h-1/3 w-11/12 max-w-sm rounded-lg border-2 border-white/80" />
           </div>
           <p className="absolute inset-x-0 bottom-3 px-4 text-center text-sm text-white/90">{status}</p>
         </div>
       )}
 
       {fatal && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="text-sm text-white/80">{fatal}</p>
         </div>
       )}
 
       <div className="safe-bottom space-y-3 border-t border-white/15 px-4 pt-3">
+        {!fatal && zoomRange && zoom !== null && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-white/60">Zoom</span>
+            <input
+              type="range"
+              min={zoomRange.min}
+              max={zoomRange.max}
+              step={zoomRange.step}
+              value={zoom}
+              onChange={(e) => changeZoom(Number(e.target.value))}
+              className="flex-1"
+            />
+          </div>
+        )}
         {!fatal && (
           <div className="flex gap-2">
             <button

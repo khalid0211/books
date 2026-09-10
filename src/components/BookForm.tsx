@@ -182,26 +182,43 @@ export default function BookForm({ initial }: Props) {
 
       {/* Find by ISBN */}
       <div className="mb-5 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-800">
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          ISBN
+        </label>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setScanning(true)}
-            className="flex-1 rounded-lg bg-slate-900 px-3 py-3 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-          >
-            📷 Scan ISBN
-          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={values.isbn13}
+            onChange={(e) => set("isbn13", e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void runLookup();
+              }
+            }}
+            placeholder="Type or paste ISBN-13"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-3 text-base outline-none focus:border-slate-500 dark:border-slate-700 dark:bg-slate-900"
+          />
           <button
             type="button"
             onClick={() => runLookup()}
             disabled={!canLookup || lookupBusy}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-700"
+            className="shrink-0 rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
           >
-            {lookupBusy ? "Looking up…" : "Look up ISBN"}
+            {lookupBusy ? "…" : "Look up"}
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setScanning(true)}
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-700"
+        >
+          📷 Scan barcode
+        </button>
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          Scan the barcode, or type an ISBN-13 in the field below and tap “Look up”. Open Library
-          &amp; Google Books fill the rest.
+          Type the ISBN and tap “Look up”, or scan the barcode. Open Library &amp; Google Books
+          fill the rest.
         </p>
         {lookupErr && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{lookupErr}</p>}
         {lookupNote && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{lookupNote}</p>}
