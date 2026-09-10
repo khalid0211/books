@@ -52,17 +52,44 @@ Windows Security → Firewall → Allow an app → add Node.js for Private.
 
 ## API
 
-| Method | Path              | Purpose                        |
-| ------ | ----------------- | ------------------------------ |
-| GET    | `/api/books?q=`   | list / search                  |
-| POST   | `/api/books`      | create                         |
-| GET    | `/api/books/:id`  | fetch one                      |
-| PUT    | `/api/books/:id`  | update                         |
-| DELETE | `/api/books/:id`  | delete                         |
+| Method | Path                  | Purpose                                   |
+| ------ | --------------------- | ----------------------------------------- |
+| GET    | `/api/books?q=`       | list / search                             |
+| POST   | `/api/books`          | create                                    |
+| GET    | `/api/books/:id`      | fetch one                                 |
+| PUT    | `/api/books/:id`      | update                                    |
+| DELETE | `/api/books/:id`      | delete                                    |
+| GET    | `/api/lookup?isbn=`   | fetch metadata for an ISBN (see below)    |
 
 `q` matches title, author, publisher, tags, and ISBN. `sort` accepts
 `title|authors|publicationDate|rating|createdAt|updatedAt`, `dir` accepts
 `asc|desc`.
+
+## ISBN barcode scan + auto-fill
+
+On the **Add / Edit** screen:
+
+- **Scan ISBN** opens the camera, reads the EAN-13 barcode on the back cover, then
+  looks the book up and fills the empty fields (title, authors, publisher,
+  publication date, pages, language, tags, cover image).
+- **Look up ISBN** does the same from a typed ISBN — no camera needed.
+
+`/api/lookup` queries **Open Library** first (no key, no quota) and fills any gaps
+from **Google Books**. Only empty fields are filled, so your own edits are never
+overwritten. Year-only publication dates become `YYYY-01-01`.
+
+### The camera needs HTTPS
+
+Browsers only allow camera access over `https://` or `http://localhost` — **not**
+over `http://<lan-ip>`. So for scanning on the phone:
+
+```bash
+npm run dev:https
+```
+
+Next generates a local certificate; open `https://<desktop-ip>:3000` on the phone
+and tap **Advanced → Proceed** past the “not private” warning once. Typed
+**Look up ISBN** works fine over plain `http://` if you'd rather skip the cert.
 
 ## Fields
 

@@ -1,0 +1,135 @@
+import { NextResponse } from "next/server";
+import {
+  cleanIsbn,
+  isValidIsbn,
+  isbn10to13,
+  normalizePubDate,
+  normalizeLanguage,
+  type LookupResult,
+} from "@/lib/isbn";
+
+export const dynamic = "force-dynamic";
+
+const UA = "BookCatalog/0.1 (personal library app)";
+const TIMEOUT_MS = 7000;
+
+async function getJson(url: string): Promise<any | null> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function firstStr(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+/** Open Library — no key, no quota, primary source. */
+function parseOpenLibrary(payload: any, isbn: string) {
+  const rec = payload?.[`ISBN:${isbn}`];
+  if (!rec) return null;
+  const ids = rec.identifiers ?? {};
+  const title = [rec.title, rec.subtitle].filter(Boolean).join(": ") || null;
+  return {
+    title,
+    authors: Array.isArray(rec.authors)
+      ? rec.authors.map((a: any) => a?.name).filter(Boolean).join(", ") || null
+      : null,
+    isbn10: ids.isbn_10?.[0] ?? null,
+    isbn13: ids.isbn_13?.[0] ?? null,
+    publisher: Array.isArray(rec.publishers)
+      ? rec.publishers.map((p: any) => p?.name).filter(Boolean).join(", ") || null
+      : null,
+    publicationDate: normalizePubDate(rec.publish_date),
+    pageCount: Number.isFinite(rec.number_of_pages) ? Number(rec.number_of_pages) : null,
+    language: null as string | null, // jscmd=data omits language
+    tags: Array.isArray(rec.subjects)
+      ? rec.subjects.slice(0, 6).map((s: any) => s?.name).filter(Boolean).join(", ") || null
+      : null,
+    coverImageUrl: firstStr(rec.cover?.large, rec.cover?.medium),
+  };
+}
+
+/** Google Books — richer language/categories/cover, but shared anonymous quota. */
+function parseGoogleBooks(payload: any) {
+  const info = payload?.items?.[0]?.volumeInfo;
+  if (!info) return null;
+  const ind: any[] = info.industryIdentifiers ?? [];
+  const pick = (type: string) => ind.find((i) => i.type === type)?.identifier ?? null;
+  let cover: string | null = firstStr(info.imageLinks?.thumbnail, info.imageLinks?.smallThumbnail);
+  if (cover) cover = cover.replace(/^http:/, "https:").replace(/&edge=curl/, "");
+  return {
+    title: [info.title, info.subtitle].filter(Boolean).join(": ") || null,
+    authors: Array.isArray(info.authors) ? info.authors.join(", ") || null : null,
+    isbn10: pick("ISBN_10"),
+    isbn13: pick("ISBN_13"),
+    publisher: firstStr(info.publisher),
+    publicationDate: normalizePubDate(info.publishedDate),
+    pageCount: Number.isFinite(info.pageCount) ? Number(info.pageCount) : null,
+    language: normalizeLanguage(info.language),
+    tags: Array.isArray(info.categories) ? info.categories.slice(0, 6).join(", ") || null : null,
+    coverImageUrl: cover,
+  };
+}
+
+// GET /api/lookup?isbn=9780132350884
+export async function GET(req: Request) {
+  const raw = new URL(req.url).searchParams.get("isbn") ?? "";
+  const isbn = cleanIsbn(raw);
+
+  if (!isbn) return NextResponse.json({ error: "Missing isbn parameter" }, { status: 400 });
+  if (!isValidIsbn(isbn)) {
+    return NextResponse.json({ error: "That is not a valid ISBN-10 or ISBN-13" }, { status: 400 });
+  }
+
+  const isbn13 = isbn.length === 13 ? isbn : isbn10to13(isbn);
+  const queryIsbn = isbn13 ?? isbn;
+
+  const [olRaw, gbRaw] = await Promise.all([
+    getJson(`https://openlibrary.org/api/books?bibkeys=ISBN:${queryIsbn}&format=json&jscmd=data`),
+    getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${queryIsbn}`),
+  ]);
+
+  const ol = parseOpenLibrary(olRaw, queryIsbn);
+  const gb = parseGoogleBooks(gbRaw);
+
+  if (!ol && !gb) {
+    return NextResponse.json(
+      { error: "No metadata found for this ISBN in Open Library or Google Books" },
+      { status: 404 },
+    );
+  }
+
+  // Merge field-by-field: Open Library wins, Google Books fills the gaps.
+  const merged: LookupResult = {
+    title: ol?.title ?? gb?.title ?? null,
+    authors: ol?.authors ?? gb?.authors ?? null,
+    isbn10: ol?.isbn10 ?? gb?.isbn10 ?? (isbn.length === 10 ? isbn : null),
+    isbn13: ol?.isbn13 ?? gb?.isbn13 ?? isbn13 ?? null,
+    publisher: ol?.publisher ?? gb?.publisher ?? null,
+    publicationDate: ol?.publicationDate ?? gb?.publicationDate ?? null,
+    pageCount: ol?.pageCount ?? gb?.pageCount ?? null,
+    language: gb?.language ?? ol?.language ?? null,
+    tags: ol?.tags ?? gb?.tags ?? null,
+    coverImageUrl: gb?.coverImageUrl ?? ol?.coverImageUrl ?? null,
+    sources: [ol ? "Open Library" : null, gb ? "Google Books" : null].filter(Boolean) as string[],
+  };
+
+  return NextResponse.json(merged);
+}
