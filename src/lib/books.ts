@@ -14,6 +14,7 @@ export const FORMATS = [
 export type BookFormat = (typeof FORMATS)[number];
 
 export type BookInput = {
+  ownerId: number | null;
   title: string;
   authors: string;
   isbn10: string | null;
@@ -34,10 +35,16 @@ export type BookInput = {
 };
 
 export type Book = BookInput & {
+  owner?: { id: number; name: string } | null;
   id: number;
   createdAt: string;
   updatedAt: string;
 };
+
+/** Permanent collection number, derived from the existing database ID. */
+export function bookNumber(id: number): string {
+  return `B${String(id).padStart(6, "0")}`;
+}
 
 /** A field that renders as one control in the form. */
 export type FieldDef = {
@@ -55,6 +62,7 @@ export type FieldDef = {
 };
 
 export const FIELD_DEFS: FieldDef[] = [
+  { name: "ownerId", label: "Book owner", type: "select" },
   { name: "title", label: "Title", type: "text", required: true, placeholder: "Book title" },
   { name: "authors", label: "Author(s)", type: "text", placeholder: "Comma-separated" },
   { name: "isbn13", label: "ISBN-13", type: "text", half: true, placeholder: "9780…" },
@@ -76,6 +84,7 @@ export const FIELD_DEFS: FieldDef[] = [
 
 export function emptyBookInput(): BookInput {
   return {
+    ownerId: null,
     title: "",
     authors: "",
     isbn10: null,
@@ -134,6 +143,9 @@ export function parseBookInput(body: unknown): BookInput {
   const title = toStr(b.title);
   if (!title) throw new ValidationError("Title is required");
 
+  const ownerId = toInt(b.ownerId, "Book owner");
+  if (ownerId !== null && (!Number.isSafeInteger(ownerId) || ownerId < 1 || typeof b.ownerId === "boolean")) throw new ValidationError("Select a valid book owner");
+
   const rating = toInt(b.rating, "Rating");
   if (rating !== null && (rating < 1 || rating > 5)) {
     throw new ValidationError("Rating must be between 1 and 5");
@@ -155,6 +167,7 @@ export function parseBookInput(body: unknown): BookInput {
   }
 
   return {
+    ownerId,
     title,
     authors: toStr(b.authors) ?? "",
     isbn10: toStr(b.isbn10),

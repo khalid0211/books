@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { currentUser } from "@/lib/auth";
+import AccountBar from "@/components/AccountBar";
 
 export const metadata: Metadata = {
   title: "Book Catalog",
@@ -15,10 +17,11 @@ export const viewport: Viewport = {
   themeColor: "#1e293b",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const user = await currentUser();
   return (
     <html lang="en">
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">{user && <AccountBar email={user.email} role={user.role} />}{children}</body>
     </html>
   );
 }

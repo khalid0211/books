@@ -1,3 +1,4 @@
+import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -14,17 +15,19 @@ async function getId(ctx: Ctx): Promise<number | null> {
 }
 
 // GET /api/books/:id
-export async function GET(_req: Request, ctx: Ctx) {
+export async function GET(req: Request, ctx: Ctx) {
+  const denied = await authorize(req, READ); if (denied) return denied;
   const id = await getId(ctx);
   if (id === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-  const book = await prisma.book.findUnique({ where: { id } });
+  const book = await prisma.book.findUnique({ where: { id }, include: { owner: { select: { id: true, name: true } } } });
   if (!book) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(book);
 }
 
 // PUT /api/books/:id
 export async function PUT(req: Request, ctx: Ctx) {
+  const denied = await authorize(req, WRITE); if (denied) return denied;
   const id = await getId(ctx);
   if (id === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
@@ -37,6 +40,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
   try {
     const data = parseBookInput(body);
+    if (data.ownerId !== null && !await prisma.bookOwner.findUnique({ where: { id: data.ownerId } })) throw new ValidationError("Selected book owner no longer exists. Reload and choose an owner.");
     const book = await prisma.book.update({ where: { id }, data });
     return NextResponse.json(book);
   } catch (err) {
@@ -52,7 +56,8 @@ export async function PUT(req: Request, ctx: Ctx) {
 }
 
 // DELETE /api/books/:id
-export async function DELETE(_req: Request, ctx: Ctx) {
+export async function DELETE(req: Request, ctx: Ctx) {
+  const denied = await authorize(req, OWNER); if (denied) return denied;
   const id = await getId(ctx);
   if (id === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 

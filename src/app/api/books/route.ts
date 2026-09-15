@@ -1,3 +1,4 @@
+import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseBookInput, ValidationError } from "@/lib/books";
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/books?q=search&sort=title&dir=asc
 export async function GET(req: Request) {
+  const denied = await authorize(req, READ); if (denied) return denied;
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();
   const sort = searchParams.get("sort") ?? "createdAt";
@@ -27,12 +29,13 @@ export async function GET(req: Request) {
       }
     : undefined;
 
-  const books = await prisma.book.findMany({ where, orderBy });
+  const books = await prisma.book.findMany({ where, orderBy, include: { owner: { select: { id: true, name: true } } } });
   return NextResponse.json(books);
 }
 
 // POST /api/books
 export async function POST(req: Request) {
+  const denied = await authorize(req, WRITE); if (denied) return denied;
   let body: unknown;
   try {
     body = await req.json();
@@ -42,6 +45,7 @@ export async function POST(req: Request) {
 
   try {
     const data = parseBookInput(body);
+    if (data.ownerId !== null && !await prisma.bookOwner.findUnique({ where: { id: data.ownerId } })) throw new ValidationError("Selected book owner no longer exists. Reload and choose an owner.");
     const book = await prisma.book.create({ data });
     return NextResponse.json(book, { status: 201 });
   } catch (err) {

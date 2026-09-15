@@ -34,6 +34,8 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
   const [manual, setManual] = useState("");
 
   useEffect(() => {
+    // Strict Mode runs setup → cleanup → setup with the same refs.
+    doneRef.current = false;
     const secure = typeof window !== "undefined" && window.isSecureContext;
     const hasCam = !!navigator.mediaDevices?.getUserMedia;
     if (!secure) {
@@ -46,6 +48,8 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     }
 
     let cancelled = false;
+    let stream: MediaStream | null = null;
+    let sessionControls: Controls | null = null;
 
     (async () => {
       try {
@@ -53,6 +57,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
           import("@zxing/browser"),
           import("@zxing/library"),
         ]);
+        if (cancelled) return;
 
         const still = new Map();
         still.set(DecodeHintType.POSSIBLE_FORMATS, [
@@ -64,28 +69,38 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         still.set(DecodeHintType.TRY_HARDER, true);
         stillReaderRef.current = new BrowserMultiFormatReader(still) as unknown as StillReader;
 
-        // Continuous reader: EAN-13 only, no TRY_HARDER, so it keeps up with the video.
+        // TRY_HARDER also checks more rows and rotated barcodes.
         const live = new Map();
         live.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13]);
-        const reader = new BrowserMultiFormatReader(live, { delayBetweenScanAttempts: 100 });
+        live.set(DecodeHintType.TRY_HARDER, true);
+        const reader = new BrowserMultiFormatReader(live, { delayBetweenScanAttempts: 250 });
 
         if (cancelled) return;
-        setStatus("Fill the box with the barcode, then tap “Capture & read”");
-
-        const controls = (await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
+        });
+        if (cancelled || doneRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        const controls = await reader.decodeFromStream(
+          stream,
           videoRef.current!,
           (result) => {
-            if (!doneRef.current && result) handleText(result.getText());
+            if (!cancelled && !doneRef.current && result) handleText(result.getText());
           },
-        )) as unknown as Controls;
+        );
+        sessionControls = controls;
+        if (cancelled || doneRef.current) {
+          controls.stop();
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         controlsRef.current = controls;
 
         const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks?.()[0] ?? null;
@@ -96,17 +111,15 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         };
         if (caps.torch || typeof controls.switchTorch === "function") setCanTorch(true);
         if (caps.zoom && caps.zoom.max > caps.zoom.min) {
-          const start = Math.min(2, caps.zoom.max);
+          const start = track?.getSettings().zoom ?? caps.zoom.min;
           setZoomRange({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 });
-          try {
-            await track!.applyConstraints(zoomConstraint(start));
-            setZoom(start);
-          } catch {
-            setZoom(caps.zoom.min);
-          }
+          setZoom(start);
         }
         setReady(true);
+        setStatus("Scanning automatically… Keep the whole barcode sharp and level, or tap “Scan now”.");
       } catch (err) {
+        sessionControls?.stop();
+        stream?.getTracks().forEach((track) => track.stop());
         if (cancelled) return;
         const name = err instanceof DOMException ? err.name : "";
         setFatal(
@@ -122,12 +135,17 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      controlsRef.current?.stop();
+      sessionControls?.stop();
+      stream?.getTracks().forEach((track) => track.stop());
+      controlsRef.current = null;
+      trackRef.current = null;
+      stillReaderRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function finish(isbn: string) {
+    if (doneRef.current) return;
     doneRef.current = true;
     controlsRef.current?.stop();
     if (navigator.vibrate) navigator.vibrate(60);
@@ -150,6 +168,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     if (!reader) return false;
     try {
       const res = await reader.decodeFromImageUrl(url);
+      if (doneRef.current || stillReaderRef.current !== reader) return true;
       return handleText(res.getText());
     } catch {
       return false; // NotFoundException — no barcode in this image
@@ -176,7 +195,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
   }
 
   async function capture() {
-    if (busy || doneRef.current) return;
+    if (!ready || busy || doneRef.current) return;
     setBusy(true);
     setStatus("Reading…");
     try {
@@ -184,7 +203,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         const url = frameToUrl(factor);
         if (url && (await decodeUrl(url))) return;
       }
-      setStatus("Couldn't read it. Get closer so the barcode is sharp and fills the box, add light, tap again.");
+      if (!doneRef.current) setStatus("No ISBN found. Keep all the bars in view, move back if blurry, add light, and tap Scan now again.");
     } finally {
       setBusy(false);
     }
@@ -198,7 +217,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     setStatus("Reading photo…");
     const url = URL.createObjectURL(file);
     try {
-      if (!(await decodeUrl(url))) {
+      if (!(await decodeUrl(url)) && !doneRef.current) {
         setStatus("No barcode found in that photo. Retake it closer, with the barcode sharp and level.");
       }
     } finally {
@@ -233,9 +252,9 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black text-white">
-      <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm font-medium">Scan ISBN {ready ? "" : "· loading…"}</span>
+    <div role="dialog" aria-modal="true" aria-label="Scan ISBN" className="fixed inset-x-0 top-0 z-50 flex h-dvh flex-col overflow-y-auto bg-black text-white">
+      <div className="flex shrink-0 items-center justify-between px-4 py-3">
+        <span className="text-sm font-medium">Scan ISBN {ready || fatal ? "" : "· loading…"}</span>
         <div className="flex items-center gap-2">
           {canTorch && (
             <button
@@ -252,12 +271,11 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
       </div>
 
       {!fatal && (
-        <div className="relative flex-1 bg-black">
-          <video ref={videoRef} playsInline muted className="h-full w-full object-contain" />
+        <div className="relative min-h-32 flex-1 bg-black">
+          <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-contain" />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="h-1/3 w-11/12 max-w-sm rounded-lg border-2 border-white/80" />
           </div>
-          <p className="absolute inset-x-0 bottom-3 px-4 text-center text-sm text-white/90">{status}</p>
         </div>
       )}
 
@@ -267,7 +285,8 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
-      <div className="safe-bottom space-y-3 border-t border-white/15 px-4 pt-3">
+      <div className="safe-bottom shrink-0 space-y-3 border-t border-white/15 px-4 pt-3">
+        <p role="status" className="text-center text-sm text-white/90">{fatal ? "Enter the ISBN below to look up the book." : status}</p>
         {!fatal && zoomRange && zoom !== null && (
           <div className="flex items-center gap-3">
             <span className="text-xs text-white/60">Zoom</span>
@@ -286,10 +305,10 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
           <div className="flex gap-2">
             <button
               onClick={capture}
-              disabled={busy}
+              disabled={!ready || busy}
               className="flex-1 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black disabled:opacity-50"
             >
-              {busy ? "Reading…" : "Capture & read"}
+              {busy ? "Reading…" : "Scan now"}
             </button>
             <label className="rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-medium">
               Photo
@@ -305,7 +324,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
               onChange={(e) => setManual(e.target.value)}
               inputMode="numeric"
               placeholder="978…"
-              className="flex-1 rounded-lg bg-white/10 px-3 py-3 text-base outline-none placeholder:text-white/40"
+              className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-3 text-base outline-none placeholder:text-white/40"
             />
             <button onClick={submitManual} className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-black">
               Use

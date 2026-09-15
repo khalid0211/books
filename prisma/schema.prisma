@@ -2,13 +2,73 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model User {
+  id Int @id @default(autoincrement())
+  email String @unique
+  role String @default("VIEW")
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  sessions Session[]
+}
+
+model Session {
+  tokenHash String @id
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+}
+
+model LoginCode {
+  id Int @id @default(autoincrement())
+  email String
+  hash String
+  attempts Int @default(0)
+  consumed Boolean @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([email, createdAt])
+}
+
+model Room {
+  id Int @id @default(autoincrement())
+  name String
+  code String @unique
+  cabinets Cabinet[]
+}
+
+model Cabinet {
+  id Int @id @default(autoincrement())
+  number Int
+  roomId Int
+  room Room @relation(fields: [roomId], references: [id])
+  shelves Shelf[]
+  @@unique([roomId, number])
+}
+
+model Shelf {
+  id Int @id @default(autoincrement())
+  number Int
+  cabinetId Int
+  cabinet Cabinet @relation(fields: [cabinetId], references: [id])
+  @@unique([cabinetId, number])
+}
+
 datasource db {
   // Switch this to "postgresql" and update DATABASE_URL in .env to move to Postgres.
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
+model BookOwner {
+  id Int @id @default(autoincrement())
+  name String
+  nameKey String @unique
+  books Book[]
+}
+
 model Book {
+  ownerId Int?
+  owner BookOwner? @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id              Int      @id @default(autoincrement())
   title           String
   authors         String // free text; comma-separate multiple authors

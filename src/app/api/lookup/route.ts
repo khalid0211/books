@@ -1,4 +1,6 @@
+import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { queueOpenLibrary } from "@/lib/open-library-queue";
 import {
   cleanIsbn,
   isValidIsbn,
@@ -11,9 +13,10 @@ import {
 export const dynamic = "force-dynamic";
 
 const UA = "BookCatalog/0.1 (personal library app)";
-const TIMEOUT_MS = 7000;
+const TIMEOUT_MS = 15000;
+type JsonResult = { data: any; error?: string; retryable?: boolean };
 
-async function getJson(url: string): Promise<any | null> {
+async function getJson(url: string): Promise<JsonResult> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
@@ -22,13 +25,23 @@ async function getJson(url: string): Promise<any | null> {
       signal: ctrl.signal,
       cache: "no-store",
     });
-    if (!res.ok) return null;
-    return await res.json();
+    if (!res.ok) return {
+      data: null,
+      error: res.status === 429 ? "request quota/rate limit reached" : `HTTP ${res.status}`,
+      retryable: res.status === 408 || res.status >= 500,
+    };
+    return { data: await res.json() };
   } catch {
-    return null;
+    return { data: null, error: "connection failed or timed out", retryable: true };
   } finally {
     clearTimeout(t);
   }
+}
+
+async function getOpenLibrary(url: string): Promise<JsonResult> {
+  const first = await queueOpenLibrary(() => getJson(url));
+  // Retry transient failures once, through the same one-second queue.
+  return first.retryable ? queueOpenLibrary(() => getJson(url)) : first;
 }
 
 function firstStr(...vals: unknown[]): string | null {
@@ -40,7 +53,7 @@ function firstStr(...vals: unknown[]): string | null {
   return null;
 }
 
-/** Open Library — no key, no quota, primary source. */
+/** Open Library — no key, rate-limited, primary source. */
 function parseOpenLibrary(payload: any, isbn: string) {
   const rec = payload?.[`ISBN:${isbn}`];
   if (!rec) return null;
@@ -90,6 +103,7 @@ function parseGoogleBooks(payload: any) {
 
 // GET /api/lookup?isbn=9780132350884
 export async function GET(req: Request) {
+  const denied = await authorize(req, WRITE); if (denied) return denied;
   const raw = new URL(req.url).searchParams.get("isbn") ?? "";
   const isbn = cleanIsbn(raw);
 
@@ -102,14 +116,24 @@ export async function GET(req: Request) {
   const queryIsbn = isbn13 ?? isbn;
 
   const [olRaw, gbRaw] = await Promise.all([
-    getJson(`https://openlibrary.org/api/books?bibkeys=ISBN:${queryIsbn}&format=json&jscmd=data`),
+    getOpenLibrary(`https://openlibrary.org/api/books?bibkeys=ISBN:${queryIsbn}&format=json&jscmd=data`),
     getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${queryIsbn}`),
   ]);
 
-  const ol = parseOpenLibrary(olRaw, queryIsbn);
-  const gb = parseGoogleBooks(gbRaw);
+  const ol = parseOpenLibrary(olRaw.data, queryIsbn);
+  const gb = parseGoogleBooks(gbRaw.data);
 
   if (!ol && !gb) {
+    const failures = [
+      olRaw.error ? `Open Library: ${olRaw.error}` : null,
+      gbRaw.error ? `Google Books: ${gbRaw.error}` : null,
+    ].filter(Boolean);
+    if (failures.length) {
+      return NextResponse.json(
+        { error: `Lookup incomplete (${failures.join("; ")}). Please try again. This does not mean the book is missing.` },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "No metadata found for this ISBN in Open Library or Google Books" },
       { status: 404 },

@@ -20,6 +20,25 @@ npm run db:push           # creates prisma/dev.db from the schema
 npm run db:seed           # optional: inserts 3 sample books
 ```
 
+## User access
+
+Set `OWNER_EMAIL`, a random `AUTH_SECRET` (at least 32 characters), and
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` in `.env`.
+The configured Owner signs in at `/login` and adds users through **Manage users**.
+Only enabled, listed users receive codes. Codes expire in 10 minutes, allow five
+attempts, and can be used once. Requests are limited to one per minute and five
+per hour per email. Login sessions last 30 days; signing out revokes the session.
+Disabling a user revokes their sessions and outstanding codes immediately.
+
+- Owner: manage users, edit catalog and locations, delete books.
+- Librarian: scan, add and edit books, manage locations.
+- View: search and view books only.
+
+The single Owner is determined by `OWNER_EMAIL`, not an editable user role.
+SMTP must be configured; login codes are never printed to logs.
+After schema changes, run `node node_modules/prisma/build/index.js db push`
+with the development server stopped, then restart it.
+
 ## Run it (dev)
 
 ```bash
@@ -110,3 +129,9 @@ No application code changes.
 
 The whole database is `prisma/dev.db`. Copy it somewhere safe on a schedule
 (`copy prisma\dev.db backups\dev-%date%.db`).
+
+## Book owners
+
+Use **Book owners** on the catalog to add or rename people whose books are in the library. Owner and Librarian accounts can manage this list. Book ownership is separate from login accounts and grants no application access.
+
+Choose a **Book owner** on the Add / Edit book form. Existing books start Unassigned. Owner names appear on desktop and phone lists and are included in catalog search. Duplicate names are rejected regardless of capitalization or extra spaces. Renaming a person updates the displayed name for all associated books.
