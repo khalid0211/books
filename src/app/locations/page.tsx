@@ -6,7 +6,7 @@ import { locationCode, type LocationRoom } from "@/lib/locations";
 
 const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-800";
 const panel = "space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700";
-const button = "rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900";
+const button = "rounded-lg bg-teal-700 px-4 py-3 text-white disabled:opacity-40 dark:bg-teal-300 dark:text-slate-950";
 
 export default function LocationsPage() {
   const [rooms, setRooms] = useState<LocationRoom[]>([]);

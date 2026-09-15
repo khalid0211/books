@@ -35,6 +35,8 @@ export type BookInput = {
 };
 
 export type Book = BookInput & {
+  bookType?: string | null;
+  categories?: { id: number; name: string }[];
   owner?: { id: number; name: string } | null;
   id: number;
   createdAt: string;

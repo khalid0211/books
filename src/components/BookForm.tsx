@@ -14,6 +14,8 @@ import {
 import { cleanIsbn, isValidIsbn, type LookupResult } from "@/lib/isbn";
 import IsbnScanner from "@/components/IsbnScanner";
 import { flattenLocations } from "@/lib/locations";
+import ClassificationPicker from "@/components/ClassificationPicker";
+import { suggestClassification, type CategoryChoice, type Classification } from "@/lib/classification";
 
 type Props = { initial?: Book; canDelete?: boolean };
 
@@ -42,6 +44,22 @@ const LOOKUP_FIELDS: (keyof BookInput)[] = [
 export default function BookForm({ initial, canDelete = false }: Props) {
   const router = useRouter();
   const isEdit = Boolean(initial);
+  const [categories, setCategories] = useState<CategoryChoice[]>([]);
+  const [classification, setClassification] = useState<Classification>({ bookType: initial?.bookType || null, categoryIds: initial?.categories?.map((c) => c.id) || [] });
+  const [subjects, setSubjects] = useState<string[] | null>(null);
+  const [categoryError, setCategoryError] = useState("");
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/categories", { cache: "no-store" });
+        if (!res.ok) throw new Error("Could not load categories. Reload to try again.");
+        setCategories(await res.json()); setCategoryError("");
+      } catch (e) { setCategoryError(e instanceof Error ? e.message : "Could not load categories."); }
+    }
+    void load(); window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, []);
+  const suggestion = subjects ? suggestClassification(subjects, categories) : null;
   const labelFor = useMemo(() => {
     const m = new Map<string, string>();
     for (const f of FIELD_DEFS) m.set(f.name, f.label);
@@ -139,6 +157,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Lookup failed (${res.status})`);
       const result = data as LookupResult;
+      setSubjects(result.subjects || (result.tags ? result.tags.split(",") : []));
       const filled = applyLookup(result, start);
       const src = result.sources?.join(" + ") || "the web";
       setLookupNote(
@@ -187,7 +206,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...classification }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
@@ -218,13 +237,13 @@ export default function BookForm({ initial, canDelete = false }: Props) {
   const canLookup = isValidIsbn(isbn);
 
   return (
-    <div className="mx-auto max-w-xl px-4 pb-28 md:pb-10">
+    <div className="desktop-book-form mx-auto max-w-xl px-4 pb-28 md:max-w-4xl md:px-8 md:pb-10">
       {initial && <Link href={`/books/${initial.id}/label`} className="my-3 inline-block underline">Print label (saved book)</Link>}
       {scanning && <IsbnScanner onDetected={onScanDetected} onClose={() => setScanning(false)} />}
 
       <header className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <Link href={isEdit ? `/books/${initial!.id}` : "/"} className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
-          ‹ Back
+        <Link href="/" className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
+          ‹ Catalog
         </Link>
         <h1 className="text-lg font-semibold">{isEdit ? "Edit book" : "Add book"}</h1>
       </header>
@@ -262,7 +281,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
             type="button"
             onClick={() => runLookup()}
             disabled={!canLookup || lookupBusy}
-            className="shrink-0 rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+            className="shrink-0 rounded-lg bg-teal-700 px-4 py-3 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-40 dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200"
           >
             {lookupBusy ? "…" : "Look up"}
           </button>
@@ -271,12 +290,12 @@ export default function BookForm({ initial, canDelete = false }: Props) {
           type="button"
           onClick={() => setScanning(true)}
           disabled={lookupBusy}
-          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-700"
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm font-medium hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:hover:bg-teal-800"
         >
           📷 Scan barcode
         </button>
         {lookupBusy && (
-          <div role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <div role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-700 dark:bg-teal-700 dark:text-slate-200">
             <span aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-slate-400 border-t-transparent motion-reduce:animate-none" />
             Fetching book info…
           </div>
@@ -290,6 +309,12 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       </div>
 
       <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-3 sm:col-span-2">
+          <ClassificationPicker categories={categories} value={classification} onChange={setClassification} disabled={saving} />
+          <Link href="/categories" target="_blank" rel="noopener noreferrer" className="inline-block text-sm underline">Manage categories (new tab)</Link>
+          {categoryError && <p role="alert" className="text-sm text-red-600">{categoryError}</p>}
+          {suggestion && <div className="rounded-xl border border-teal-300 bg-teal-50 p-4 text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"><p className="font-semibold">Suggested from book lookup</p><p className="mt-1">{[suggestion.bookType, ...categories.filter((c) => suggestion.categoryIds.includes(c.id)).map((c) => c.name)].filter(Boolean).join(" · ") || "No matching categories found. Choose manually above."}</p>{(suggestion.bookType || suggestion.categoryIds.length > 0) && <button type="button" disabled={saving} className="mt-3 rounded-lg border border-teal-600 px-3 py-2" onClick={() => { setClassification((value) => ({ bookType: value.bookType || suggestion.bookType, categoryIds: value.categoryIds.length ? value.categoryIds : suggestion.categoryIds })); setSubjects(null); }}>Use suggestions for empty fields</button>}<p className="mt-2 text-xs">Your existing selections are kept. Review before saving.</p></div>}
+        </div>
         <p className="text-sm text-slate-500 sm:col-span-2">Only title is required. All other details are optional.</p>
         {FIELD_DEFS.filter((f) => MAIN_FIELDS.includes(f.name) && f.name !== "shelfLocation").map((f) => (
           <Field key={f.name} def={f} value={values[f.name]} onChange={(v) => set(f.name, v)} />
@@ -371,7 +396,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
           <button
             type="submit"
             disabled={saving}
-            className="flex-1 rounded-lg bg-slate-900 px-4 py-3 font-medium text-white hover:bg-slate-700 disabled:opacity-50 sm:flex-none dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+            className="flex-1 rounded-lg bg-teal-700 px-4 py-3 font-medium text-white hover:bg-teal-800 disabled:opacity-50 sm:flex-none dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200"
           >
             {saving ? "Saving…" : isEdit ? "Save changes" : "Add book"}
           </button>

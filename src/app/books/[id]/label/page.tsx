@@ -9,5 +9,5 @@ export default async function LabelPage({ params }: { params: Promise<{ id: stri
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const book = await prisma.book.findUnique({ where: { id }, include: { owner: true } });
   if (!book) notFound();
-  return <BookLabel id={book.id} title={book.title} owner={book.owner?.name || "Unassigned"} location={book.shelfLocation || "Unassigned"} />;
+  return <BookLabel id={book.id} title={book.title} owner={book.owner?.name || "Unassigned"} />;
 }

@@ -9,6 +9,7 @@
     "start": "next start -H 0.0.0.0",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
+    "db:categories": "node scripts/seed-categories.cjs",
     "db:studio": "prisma studio",
     "db:seed": "node --experimental-strip-types prisma/seed.ts"
   },
@@ -16,12 +17,14 @@
     "@prisma/client": "^6.16.1",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
+    "jsbarcode": "^3.12.3",
     "next": "^15.5.2",
     "nodemailer": "^10.0.9",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@types/jsbarcode": "^3.11.4",
     "@types/node": "^22.15.30",
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.1.12",

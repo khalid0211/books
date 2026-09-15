@@ -1,3 +1,4 @@
+import { classificationInput } from "@/lib/classification-input";
 import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
       }
     : undefined;
 
-  const books = await prisma.book.findMany({ where, orderBy, include: { owner: { select: { id: true, name: true } } } });
+  const books = await prisma.book.findMany({ where, orderBy, include: { categories: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } } });
   return NextResponse.json(books);
 }
 
@@ -45,8 +46,9 @@ export async function POST(req: Request) {
 
   try {
     const data = parseBookInput(body);
+    const classification = await classificationInput(body);
     if (data.ownerId !== null && !await prisma.bookOwner.findUnique({ where: { id: data.ownerId } })) throw new ValidationError("Selected book owner no longer exists. Reload and choose an owner.");
-    const book = await prisma.book.create({ data });
+    const book = await prisma.book.create({ data: { ...data, bookType: classification.bookType, categories: classification.categories ? { connect: classification.categories.set } : undefined } });
     return NextResponse.json(book, { status: 201 });
   } catch (err) {
     if (err instanceof ValidationError) {

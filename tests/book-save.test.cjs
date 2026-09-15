@@ -15,13 +15,14 @@ function load(path, dependencies) {
 for (const success of [true, false]) {
   test(`edit save clears busy state after ${success ? 'success on same page' : 'server error'}`, async () => {
     const state = [];
+    const transitions = [];
     const books = load('src/lib/books.ts', () => undefined);
     const Form = load('src/components/BookForm.tsx', (name) => {
       if (name === 'react') return {
         useState(initial) {
           const index = state.length;
           state.push(typeof initial === 'function' ? initial() : initial);
-          return [state[index], value => { state[index] = value; }];
+          return [state[index], value => { transitions.push({ index, value }); state[index] = value; }];
         },
         useMemo: fn => fn(), useRef: value => ({ current: value }), useEffect() {},
       };
@@ -43,7 +44,9 @@ for (const success of [true, false]) {
       }
     }
     await findForm(tree).props.onSubmit({ preventDefault() {} });
-    assert.equal(state[1], false, 'Saving state must reset even when navigation keeps the form mounted');
+    const saving = transitions.find((change) => change.value === true);
+    assert.ok(saving, 'Submitting should set saving state');
+    assert.equal(state[saving.index], false, 'Saving state must reset even when navigation keeps the form mounted');
     assert.ok(state.includes(success ? 'Changes saved.' : 'Save failed'));
   });
 }

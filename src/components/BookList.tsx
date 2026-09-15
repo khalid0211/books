@@ -16,13 +16,13 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState("createdAt");
   const [direction, setDirection] = useState("desc");
-  const [filters, setFilters] = useState({ format: "", location: "", rating: "", author: "", language: "", owner: "" });
+  const [filters, setFilters] = useState({ bookType: "", category: "", format: "", location: "", rating: "", author: "", language: "", owner: "" });
   const ownerChoices = [...new Map(allBooks.flatMap((b) => b.owner ? [[b.owner.id, b.owner] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name));
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const books = useMemo(() => filterBooks(allBooks, query, filters, sort, direction), [allBooks, query, filters, sort, direction]);
   const choices = (field: "format" | "shelfLocation" | "authors" | "language") => [...new Set(allBooks.map((b) => b[field]).filter((v): v is string => Boolean(v)))].sort((a, b) => a.localeCompare(b));
   const selectClass = "mt-1 w-full min-w-0 rounded-lg border border-slate-300 bg-white p-2 text-base dark:border-slate-700 dark:bg-slate-800";
-  function reset() { setQuery(""); setFilters({ format: "", location: "", rating: "", author: "", language: "", owner: "" }); setSort("createdAt"); setDirection("desc"); }
+  function reset() { setQuery(""); setFilters({ bookType: "", category: "", format: "", location: "", rating: "", author: "", language: "", owner: "" }); setSort("createdAt"); setDirection("desc"); }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,23 +53,26 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-24 md:pb-10">
+    <div className="desktop-catalog mx-auto max-w-7xl px-4 pb-24 md:px-8 md:pb-10">
       {/* Sticky header with title + search */}
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold md:text-xl">Book Catalog</h1>
-          {canEdit && <Link href="/owners" className="text-sm underline">Book owners</Link>}
-          {canEdit && <Link href="/locations" className="text-sm underline">Locations</Link>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="w-full md:mr-auto md:w-auto"><p className="mb-1 hidden text-xs font-semibold uppercase tracking-widest text-teal-700 md:block dark:text-teal-300">Your library</p><h1 className="text-xl font-semibold tracking-tight md:text-3xl">Book Catalog</h1></div>
+          {canEdit && <Link href="/classify" className="catalog-nav text-sm underline">Classify books</Link>}
+          {canEdit && <Link href="/owners" className="catalog-nav text-sm underline">Book owners</Link>}
+          {canEdit && <Link href="/locations" className="catalog-nav text-sm underline">Locations</Link>}
+          {canEdit && <Link href="/books/move" className="catalog-nav text-sm underline">Move books</Link>}
           {canEdit && <Link
             href="/books/new"
-            className="hidden rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 md:inline-block dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+            className="hidden rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 md:inline-block dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200"
           >
             + New book
           </Link>}
         </div>
-        <div className="mt-2">
+        <div className="mt-2 md:mt-6">
           <input
             type="search"
+            aria-label="Search the catalog"
             inputMode="search"
             placeholder="Search book number, title, author, ISBN, tags…"
             value={query}
@@ -79,8 +82,8 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
         </div>
       </header>
 
-      <section aria-label="Sort and filter books" className="mb-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <section aria-label="Sort and filter books" className="catalog-filters mb-4 space-y-3 md:rounded-2xl md:border md:border-slate-200 md:bg-white md:p-5 md:shadow-sm md:dark:border-slate-700 md:dark:bg-slate-800">
+        <div className="grid grid-cols-2 gap-3 md:max-w-xl">
           <label className="text-sm">Sort by<select value={sort} onChange={(e) => setSort(e.target.value)} className={selectClass}>
             <option value="createdAt">Date added</option><option value="id">Book number</option><option value="title">Title</option><option value="authors">Author</option><option value="publicationDate">Publication year</option><option value="rating">Rating</option><option value="shelfLocation">Shelf location</option>
           </select></label>
@@ -91,6 +94,8 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {([['format', 'Format', 'format'], ['location', 'Shelf location', 'shelfLocation'], ['author', 'Author(s)', 'authors'], ['language', 'Language', 'language']] as const).map(([key, label, field]) => <label key={key} className="text-sm">{label}<select value={filters[key]} onChange={(e) => setFilters((f) => ({ ...f, [key]: e.target.value }))} className={selectClass}><option value="">All</option>{key === 'location' && <option value="__none">Unassigned</option>}{choices(field).map((v) => <option key={v}>{v}</option>)}</select></label>)}
             <label className="text-sm">Book owner<select value={filters.owner} onChange={(e) => setFilters((f) => ({ ...f, owner: e.target.value }))} className={selectClass}><option value="">All owners</option><option value="__none">Unassigned</option>{ownerChoices.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+            <label className="text-sm">Type<select value={filters.bookType} onChange={(e) => setFilters((f) => ({ ...f, bookType: e.target.value }))} className={selectClass}><option value="">All types</option><option value="__none">Unclassified</option><option>Fiction</option><option>Non-fiction</option></select></label>
+            <label className="text-sm">Category<select value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))} className={selectClass}><option value="">All categories</option><option value="__none">Unclassified</option>{[...new Map(allBooks.flatMap((b) => (b.categories || []).map((c) => [c.id, c] as const))).values()].sort((a,b) => a.name.localeCompare(b.name)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
             <label className="text-sm">Rating<select value={filters.rating} onChange={(e) => setFilters((f) => ({ ...f, rating: e.target.value }))} className={selectClass}><option value="">All ratings</option><option value="unrated">Not rated</option>{[1,2,3,4,5].map((v) => <option key={v} value={v}>{v} stars and above</option>)}</select></label>
           </div>
         </details>
@@ -111,14 +116,14 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
       ) : (
         <>
           {/* Desktop: table */}
-          <div className="hidden overflow-x-auto rounded-lg border border-slate-200 md:block dark:border-slate-800">
+          <div className="catalog-table hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block dark:border-slate-700 dark:bg-slate-800">
             <table className="w-full text-sm">
               <thead className="bg-slate-100 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
                   <th className="px-3 py-2 font-medium">Book number</th><th className="px-3 py-2 font-medium">Title</th>
                   <th className="px-3 py-2 font-medium">Author(s)</th>
                   <th className="px-3 py-2 font-medium">Book owner</th><th className="px-3 py-2 font-medium">Year</th>
-                  <th className="px-3 py-2 font-medium">Format</th>
+                  <th className="px-3 py-2 font-medium">Shelf</th>
                   <th className="px-3 py-2 font-medium">Rating</th>
                   <th className="px-3 py-2 font-medium text-right">Actions</th>
                 </tr>
@@ -130,16 +135,18 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
                       <Link href={`/books/${b.id}`} className="font-medium text-slate-900 hover:underline dark:text-slate-100">
                         {b.title}
                       </Link>
+                      <p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[b.bookType, ...(b.categories || []).map((c) => c.name)].filter(Boolean).join(" · ")}</p>
+                      {b.format && <p className="mt-1 text-xs capitalize text-slate-500">{b.format}</p>}
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{b.authors || "—"}</td>
                     <td className="px-3 py-2">{b.owner?.name || "Unassigned"}</td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{pubYear(b) || "—"}</td>
-                    <td className="px-3 py-2 text-slate-600 capitalize dark:text-slate-300">{b.format || "—"}</td>
+                    <td className="px-3 py-2"><span className="inline-block whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{b.shelfLocation || "Unassigned"}</span></td>
                     <td className="px-3 py-2"><Stars value={b.rating} /></td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <Link href={`/books/${b.id}/label`} className="rounded px-2 py-1 underline">Label</Link>
-                        <Link href={`/books/${b.id}`} className="rounded px-2 py-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700">
+                        <Link href={`/books/${b.id}`} className="rounded px-2 py-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-teal-800">
                           {canEdit ? "Edit" : "View"}
                         </Link>
                         {canDelete && <button
@@ -165,7 +172,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
                   className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left active:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:active:bg-slate-700"
                 >
                   <div className="mb-1 font-mono text-xs text-slate-500">{bookNumber(b.id)}</div><div className="font-semibold">{b.title}</div>
-                  <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{b.authors || "Unknown author"}</div><div className="mt-1 text-sm text-slate-500">Owner: {b.owner?.name || "Unassigned"}</div>
+                  <p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[b.bookType, ...(b.categories || []).map((c) => c.name)].filter(Boolean).join(" · ")}</p><div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{b.authors || "Unknown author"}</div><div className="mt-1 text-sm text-slate-500">Owner: {b.owner?.name || "Unassigned"}</div>
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                     {pubYear(b) && <span>{pubYear(b)}</span>}
                     {b.format && <span className="capitalize">· {b.format}</span>}
@@ -182,7 +189,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
       {canEdit && <Link
         href="/books/new"
         aria-label="Add book"
-        className="safe-bottom fixed bottom-0 right-4 z-20 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-3xl leading-none text-white shadow-lg md:hidden dark:bg-slate-100 dark:text-slate-900"
+        className="safe-bottom fixed bottom-0 right-4 z-20 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal-700 text-3xl leading-none text-white shadow-lg md:hidden dark:bg-teal-300 dark:text-slate-950"
       >
         +
       </Link>}

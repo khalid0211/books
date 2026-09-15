@@ -152,6 +152,7 @@ export async function GET(req: Request) {
     language: gb?.language ?? ol?.language ?? null,
     tags: ol?.tags ?? gb?.tags ?? null,
     coverImageUrl: gb?.coverImageUrl ?? ol?.coverImageUrl ?? null,
+    subjects: [...new Set<string>([...(Array.isArray(olRaw.data?.[`ISBN:${queryIsbn}`]?.subjects) ? olRaw.data[`ISBN:${queryIsbn}`].subjects.map((s: any) => s?.name).filter((s: unknown): s is string => typeof s === "string") : []), ...(Array.isArray(gbRaw.data?.items?.[0]?.volumeInfo?.categories) ? gbRaw.data.items[0].volumeInfo.categories.filter((s: unknown): s is string => typeof s === "string") : [])])],
     sources: [ol ? "Open Library" : null, gb ? "Google Books" : null].filter(Boolean) as string[],
   };
 

@@ -125,6 +125,46 @@ Dates are stored as `YYYY-MM-DD` text to keep the form simple.
 
 No application code changes.
 
+## Moving books between shelves
+
+Owner and Librarian users can open **Move books** from the catalog. Choose a
+destination shelf, then enter a collection ID (for example `B000123` or `123`)
+and press **Move book**, or use **Scan book ID**. Each successful scan moves the
+book immediately and keeps the destination selected for the next book. Recent
+results show the title and previous/new location; an unknown ID changes nothing.
+
+Printed library labels now include a QR code containing the permanent book ID.
+Reprint older text-only labels to scan them. This identifies the individual copy;
+use the library label when moving books. Phone camera scanning requires HTTPS.
+A keyboard-style USB/Bluetooth scanner can fill the Book ID field and submit
+with Enter. No database migration is required for this feature.
+
+## Classifying the collection
+
+Each book has an optional **Type** (Fiction or Non-fiction) and any number of
+**Categories**. Unclassified books are included in the catalog's type/category
+filters. Category names are searchable and appear on book cards and in the table.
+
+Owner and Librarian users can open **Classify books** from the catalog:
+
+- Review suggestions from existing tags, or click **Look up ISBN** for fresh
+  Open Library/Google Books subjects. Suggestions need explicit acceptance.
+- Select up to 100 books and choose a shared type/categories to fill empty fields.
+  Existing types and category selections are preserved. Use **Edit** on a book
+  to replace or clear an existing classification.
+- Use **Manage categories** to add or rename categories. Renaming updates all
+  assigned books; duplicate names are rejected regardless of case/spacing.
+
+The Add/Edit form also offers category selections and suggestions after ISBN
+lookup. Suggestions never save automatically or overwrite existing selections.
+Subjects remain available as tags. Matching uses conservative subject rules;
+missing or conflicting metadata should be reviewed manually.
+
+For a fresh installation, stop the server, run `npm run db:push` followed by
+`npm run db:categories`, then restart. This creates 18 starter categories without
+classifying any books. Existing installations should back up the database first
+(for the default SQLite path, `python scripts/backup-classification.py`).
+
 ## Backups
 
 The whole database is `prisma/dev.db`. Copy it somewhere safe on a schedule

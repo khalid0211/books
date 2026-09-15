@@ -30,7 +30,7 @@ export default function UserManager() {
     <form className="space-y-3 rounded-xl border p-4" onSubmit={(e) => { e.preventDefault(); void save(email, role, true); }}>
       <label className="block">Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border bg-transparent p-3" /></label>
       <label className="block">Role<select value={role} onChange={(e) => setRole(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-3 dark:bg-slate-800"><option value="VIEW">View</option><option value="LIBRARIAN">Librarian</option></select></label>
-      <button disabled={busy} className="rounded-lg bg-slate-900 p-3 text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900">Add / update user</button>
+      <button disabled={busy} className="rounded-lg bg-teal-700 p-3 text-white disabled:opacity-50 dark:bg-teal-300 dark:text-slate-950">Add / update user</button>
     </form>
     <ul className="space-y-3">{users.map((u) => <li key={u.id} className="space-y-2 rounded-xl border p-4"><div className="break-all font-medium">{u.email}</div>{u.role === "OWNER" ? <p>Owner · Permanent access</p> : <div className="flex flex-wrap items-center gap-3"><select aria-label={`Role for ${u.email}`} disabled={busy} value={u.role} onChange={(e) => void save(u.email, e.target.value, u.active)} className="rounded border bg-white p-2 dark:bg-slate-800"><option value="VIEW">View</option><option value="LIBRARIAN">Librarian</option></select><span>{u.active ? "Enabled" : "Disabled"}</span><button disabled={busy} onClick={() => void save(u.email, u.role, !u.active)} className="underline">{u.active ? "Disable access" : "Enable access"}</button></div>}</li>)}</ul>
   </main>;

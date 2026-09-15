@@ -105,6 +105,7 @@ export function normalizeLanguage(code: unknown): string | null {
 
 /** Shape returned by /api/lookup and consumed by the form. */
 export type LookupResult = {
+  subjects?: string[];
   title: string | null;
   authors: string | null;
   isbn10: string | null;

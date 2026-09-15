@@ -1,3 +1,4 @@
+import { classificationInput } from "@/lib/classification-input";
 import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
@@ -20,7 +21,7 @@ export async function GET(req: Request, ctx: Ctx) {
   const id = await getId(ctx);
   if (id === null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
-  const book = await prisma.book.findUnique({ where: { id }, include: { owner: { select: { id: true, name: true } } } });
+  const book = await prisma.book.findUnique({ where: { id }, include: { categories: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } } });
   if (!book) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(book);
 }
@@ -40,8 +41,9 @@ export async function PUT(req: Request, ctx: Ctx) {
 
   try {
     const data = parseBookInput(body);
+    const classification = await classificationInput(body);
     if (data.ownerId !== null && !await prisma.bookOwner.findUnique({ where: { id: data.ownerId } })) throw new ValidationError("Selected book owner no longer exists. Reload and choose an owner.");
-    const book = await prisma.book.update({ where: { id }, data });
+    const book = await prisma.book.update({ where: { id }, data: { ...data, ...classification } });
     return NextResponse.json(book);
   } catch (err) {
     if (err instanceof ValidationError) {

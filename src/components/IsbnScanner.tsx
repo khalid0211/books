@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cleanIsbn, isValidIsbn } from "@/lib/isbn";
+import { stopScanner } from "@/lib/stop-scanner";
 
 type Props = {
   onDetected: (isbn: string) => void;
@@ -97,7 +98,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         );
         sessionControls = controls;
         if (cancelled || doneRef.current) {
-          controls.stop();
+          stopScanner(controls);
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -118,7 +119,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
         setReady(true);
         setStatus("Scanning automatically… Keep the whole barcode sharp and level, or tap “Scan now”.");
       } catch (err) {
-        sessionControls?.stop();
+        stopScanner(sessionControls);
         stream?.getTracks().forEach((track) => track.stop());
         if (cancelled) return;
         const name = err instanceof DOMException ? err.name : "";
@@ -135,7 +136,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
     return () => {
       cancelled = true;
       doneRef.current = true;
-      sessionControls?.stop();
+      stopScanner(sessionControls);
       stream?.getTracks().forEach((track) => track.stop());
       controlsRef.current = null;
       trackRef.current = null;
@@ -147,7 +148,7 @@ export default function IsbnScanner({ onDetected, onClose }: Props) {
   function finish(isbn: string) {
     if (doneRef.current) return;
     doneRef.current = true;
-    controlsRef.current?.stop();
+    stopScanner(controlsRef.current);
     if (navigator.vibrate) navigator.vibrate(60);
     setStatus(`Found ${isbn}`);
     onDetected(isbn);

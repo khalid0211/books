@@ -36,7 +36,7 @@ export default function OwnersPage() {
     {message && <p role="status" className="text-emerald-600">{message}</p>}
     <form onSubmit={save} className="space-y-3 rounded-xl border p-4">
       <label className="block">Book owner name<input required maxLength={80} disabled={busy || loading} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mahira" className={input} /></label>
-      <button disabled={busy || loading} className="rounded-lg bg-slate-900 px-4 py-3 text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900">{busy ? "Saving…" : id === null ? "Add owner" : "Save name"}</button>
+      <button disabled={busy || loading} className="rounded-lg bg-teal-700 px-4 py-3 text-white disabled:opacity-50 dark:bg-teal-300 dark:text-slate-950">{busy ? "Saving…" : id === null ? "Add owner" : "Save name"}</button>
       {id !== null && <button type="button" disabled={busy} onClick={() => { setId(null); setName(""); }} className="ml-3 underline">Cancel</button>}
     </form>
     {loading ? <p>Loading owners…</p> : !owners.length ? <p>No book owners yet.</p> : <ul className="divide-y rounded-xl border px-4">{owners.map((o) => <li key={o.id} className="flex items-center justify-between gap-3 py-3"><div><strong>{o.name}</strong><p className="text-sm text-slate-500">{o._count.books} books</p></div><button disabled={busy} onClick={() => { setId(o.id); setName(o.name); setMessage(""); }} className="p-2 underline" aria-label={`Rename ${o.name}`}>Rename</button></li>)}</ul>}

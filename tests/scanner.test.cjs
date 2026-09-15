@@ -45,6 +45,7 @@ function harness({ pendingCamera = false, pendingDecoder = false } = {}) {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     '@/lib/isbn': isbn,
+    '@/lib/stop-scanner': compile('src/lib/stop-scanner.ts', {}),
     '@zxing/browser': { BrowserMultiFormatReader: Reader },
     '@zxing/library': { DecodeHintType: { POSSIBLE_FORMATS: 1, TRY_HARDER: 2 }, BarcodeFormat: { EAN_13: 7 } },
   }, {

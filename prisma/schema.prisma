@@ -67,6 +67,8 @@ model BookOwner {
 }
 
 model Book {
+  bookType String?
+  categories Category[]
   ownerId Int?
   owner BookOwner? @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   id              Int      @id @default(autoincrement())
@@ -92,4 +94,11 @@ model Book {
 
   @@index([title])
   @@index([authors])
+}
+
+model Category {
+  id Int @id @default(autoincrement())
+  name String
+  nameKey String @unique
+  books Book[]
 }

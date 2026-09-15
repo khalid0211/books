@@ -1,0 +1,55 @@
+   ▲ Next.js 15.5.25
+   - Local:        https://localhost:3000
+   - Network:      https://0.0.0.0:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 2.2s
+ ○ Compiling /login ...
+ ✓ Compiled /login in 817ms (621 modules)
+ GET /login 200 in 1213ms
+ ✓ Compiled / in 329ms (637 modules)
+ GET / 200 in 616ms
+ ✓ Compiled /api/books in 208ms (648 modules)
+ GET /api/books 200 in 337ms
+ ○ Compiling /books/move ...
+ ✓ Compiled /books/move in 760ms (1141 modules)
+ GET /books/move 200 in 892ms
+ ✓ Compiled in 1359ms (1139 modules)
+ GET /books/move 200 in 188ms
+ GET /books/move 200 in 143ms
+ GET / 200 in 33ms
+ ✓ Compiled /api/books in 190ms (659 modules)
+ GET /api/books 200 in 306ms
+ GET /api/books 200 in 312ms
+ ✓ Compiled in 260ms (490 modules)
+ ✓ Compiled in 68ms (476 modules)
+ ✓ Compiled in 124ms (476 modules)
+ GET / 200 in 235ms
+ GET /api/books 200 in 42ms
+ ○ Compiling /books/[id] ...
+ ✓ Compiled /books/[id] in 826ms (1155 modules)
+ GET /books/16 200 in 1710ms
+ GET /books/16 200 in 52ms
+ ○ Compiling /api/locations ...
+ ✓ Compiled /api/locations in 1149ms (1161 modules)
+ GET /api/categories 200 in 1278ms
+ GET /api/categories 200 in 1287ms
+ GET /api/owners 200 in 1285ms
+ GET /api/owners 200 in 1283ms
+ GET /api/locations 200 in 1286ms
+ GET /api/locations 200 in 1291ms
+ ✓ Compiled in 434ms (497 modules)
+ GET /books/16 200 in 140ms
+ ✓ Compiled in 674ms (1175 modules)
+ GET /books/16 200 in 155ms
+ ○ Compiling /books/[id]/label ...
+ ✓ Compiled /books/[id]/label in 810ms (1277 modules)
+ GET /books/16/label 200 in 1484ms
+ GET / 200 in 160ms
+ GET /api/books 200 in 26ms
+ GET / 200 in 49ms
+ GET /api/books 200 in 19ms
+ GET /books/move 200 in 36ms
+ ✓ Compiled /api/books/move in 439ms (1274 modules)
+ POST /api/books/move 200 in 540ms
