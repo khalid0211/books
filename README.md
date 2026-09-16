@@ -186,6 +186,7 @@ with an empty catalog. The container stores its SQLite database at
 `/data/books.db`, so **create persistent storage before the first deployment**.
 Without that mount, books added on the VPS can be lost when Coolify replaces the
 container. The local `prisma/dev.db` is deliberately excluded from the image.
+The first start creates the tables and starter categories automatically.
 
 1. In Coolify, create an **Application** from the GitHub repository. Choose the
    **Dockerfile** build pack, branch containing this Dockerfile, base directory

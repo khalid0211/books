@@ -9,6 +9,7 @@ WORKDIR /app
 RUN mkdir -p /data
 
 COPY package.json package-lock.json ./
+COPY prisma/schema.prisma ./prisma/schema.prisma
 RUN npm ci
 
 COPY . .
@@ -20,5 +21,5 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 
-# The database schema is created on the persistent volume before Next.js starts.
-CMD ["sh", "-c", "npx prisma db push && exec npm start"]
+# Initialize the persistent database and starter categories before Next.js starts.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push && node scripts/seed-categories.cjs && exec npm start"]
