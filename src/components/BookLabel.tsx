@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { bookNumber } from "@/lib/books";
-import JsBarcode from "jsbarcode";
+import { renderBookLabel } from "@/lib/render-book-label";
 
 export default function BookLabel({ id, title, owner }: { id: number; title: string; owner: string }) {
   const [url, setUrl] = useState("");
@@ -14,45 +14,8 @@ export default function BookLabel({ id, title, owner }: { id: number; title: str
     try {
       setError("");
       // 600 × 300 pixels gives a 300 dpi image at 2 × 1 inches.
-      const canvas = document.createElement("canvas"); canvas.width = 600; canvas.height = 300;
-      const ctx = canvas.getContext("2d"); if (!ctx) throw new Error();
-      ctx.fillStyle = "white"; ctx.fillRect(0, 0, 600, 300); ctx.fillStyle = "black";
-      ctx.textBaseline = "top";
-      let clipped = false;
-      function line(text: string, y: number, font: string, width = 320) {
-        ctx!.font = font;
-        let result = text;
-        while (ctx!.measureText(result).width > width && result.length) { result = Array.from(result).slice(0, -1).join(""); }
-        if (result !== text) {
-          clipped = true;
-          while (ctx!.measureText(result + "…").width > width && result.length) result = Array.from(result).slice(0, -1).join("");
-          result += "…";
-        }
-        ctx!.fillText(result, 24, y);
-      }
-      line(bookNumber(id), 16, "bold 36px Arial");
-      ctx.font = "bold 27px Arial";
-      const chars = Array.from(title.replace(/\s+/g, " ").trim());
-      let first = "";
-      while (chars.length && ctx.measureText(first + chars[0]).width <= 552) first += chars.shift();
-      // Prefer wrapping between words when the first line contains a space.
-      if (chars.length && first.lastIndexOf(" ") > 0) {
-        const cut = first.lastIndexOf(" "); chars.unshift(...Array.from(first.slice(cut + 1))); first = first.slice(0, cut);
-      }
-      // Keep all text above the barcode, within the 2 × 1 inch label.
-      line(first, 59, "bold 27px Arial", 552);
-      line(chars.join("").trim(), 90, "bold 27px Arial", 552);
-      line(`Owner: ${owner}`, 124, "25px Arial", 552);
-      // Encode the permanent collection ID, so labels work across PC/phone addresses.
-      const barcode = document.createElement("canvas");
-      const options = { format: "CODE128", displayValue: false, height: 110, margin: 0, marginLeft: 10, marginRight: 10, width: 1 };
-      JsBarcode(barcode, bookNumber(id), options);
-      // Use whole pixels for each narrow bar and ten-module quiet zones.
-      const moduleWidth = Math.floor(552 / barcode.width);
-      if (moduleWidth < 1) throw new Error("Book ID is too long for the label.");
-      JsBarcode(barcode, bookNumber(id), { ...options, width: moduleWidth, marginLeft: 10 * moduleWidth, marginRight: 10 * moduleWidth });
-      ctx.drawImage(barcode, Math.floor((600 - barcode.width) / 2), 164);
-      setShortened(clipped); setUrl(canvas.toDataURL("image/png"));
+      const label = renderBookLabel(id, title, owner);
+      setShortened(label.shortened); setUrl(label.url);
     } catch { setError("Could not prepare the label. Reload to try again."); }
   }, [id, title, owner]);
   const button = "inline-block rounded-lg bg-teal-700 px-4 py-3 text-white disabled:opacity-50 dark:bg-teal-300 dark:text-slate-950";

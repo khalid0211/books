@@ -1,0 +1,16 @@
+.git
+.claude
+.next
+.next-dev
+node_modules
+backups
+certificates
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo

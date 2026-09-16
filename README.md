@@ -139,6 +139,15 @@ use the library label when moving books. Phone camera scanning requires HTTPS.
 A keyboard-style USB/Bluetooth scanner can fill the Book ID field and submit
 with Enter. No database migration is required for this feature.
 
+## Printing a range of labels on the PC
+
+From the desktop catalog, open **Print label range**. Enter the starting and
+ending book numbers (for example, `B000123` and `B000150`), then select
+**Preview labels**. Existing books in that inclusive range appear in number
+order; missing book numbers are skipped. Each label uses the same 2 × 1 inch
+layout as the single-book label. Print up to 100 book numbers at a time with
+2 × 1 inch paper, no margins, 100% scale, and browser headers/footers off.
+
 ## Classifying the collection
 
 Each book has an optional **Type** (Fiction or Non-fiction) and any number of
@@ -169,6 +178,58 @@ classifying any books. Existing installations should back up the database first
 
 The whole database is `prisma/dev.db`. Copy it somewhere safe on a schedule
 (`copy prisma\dev.db backups\dev-%date%.db`).
+
+## Deploy on a VPS with Coolify
+
+This repository includes a `Dockerfile` for Coolify. A new VPS installation starts
+with an empty catalog. The container stores its SQLite database at
+`/data/books.db`, so **create persistent storage before the first deployment**.
+Without that mount, books added on the VPS can be lost when Coolify replaces the
+container. The local `prisma/dev.db` is deliberately excluded from the image.
+
+1. In Coolify, create an **Application** from the GitHub repository. Choose the
+   **Dockerfile** build pack, branch containing this Dockerfile, base directory
+   `/`, and Dockerfile location `/Dockerfile`. Set **Ports Exposes** to `3000`.
+2. Under **Persistent Storage**, add a **Volume Mount** with Destination Path
+   `/data`. Keep the generated volume name; use the same volume for future
+   deployments of this application. Run only one app instance with this SQLite
+   database.
+3. Under **Environment Variables**, set the following as **runtime** variables.
+   Turn off **Build Variable** for secrets. `DATABASE_URL` is already set in the
+   image but is included here so it is easy to verify in Coolify.
+
+   ```text
+   DATABASE_URL=file:/data/books.db
+   OWNER_EMAIL=you@example.com
+   AUTH_SECRET=<random value of at least 32 characters>
+   SMTP_HOST=<your SMTP server>
+   SMTP_PORT=587
+   SMTP_USER=<your SMTP username>
+   SMTP_PASS=<your SMTP password>
+   MAIL_FROM=<sender address allowed by your SMTP provider>
+   ```
+
+   Generate `AUTH_SECRET` locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+   The owner receives a six-digit login code by email, so working SMTP is
+   required before you can sign in. Add other users from **Manage users** after
+   signing in.
+4. Create a DNS **A record** for a subdomain such as `books.example.com` that
+   points to the VPS public IPv4 address. If you have an **AAAA record**, make
+   sure it points to the same VPS and IPv6 works; otherwise remove it. Allow
+   inbound TCP ports **80** and **443** in the VPS firewall and Hostinger firewall.
+   Keep port `3000` private; Coolify's proxy connects to it inside Docker.
+5. In Coolify's **Domains** field, enter the full URL
+   `https://books.example.com`, then deploy. Coolify's integrated proxy obtains
+   and renews the public TLS certificate. Wait for DNS and certificate issuance,
+   then open the URL on both PC and phone. Check that the browser shows a valid
+   certificate and that sign-in and phone camera scanning work.
+
+The application should use Coolify's normal Traefik or Caddy proxy for this
+setup. A temporary generated `sslip.io` URL can help test routing, but a domain
+you control is preferable for ongoing use. Before updates, back up the SQLite
+volume (`/data/books.db`); copy it while the app is stopped or use SQLite's
+online backup command. The database is separate from the Git repository and
+image, so Git deployments never move local books onto the VPS automatically.
 
 ## Book owners
 

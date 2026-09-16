@@ -62,6 +62,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
           {canEdit && <Link href="/owners" className="catalog-nav text-sm underline">Book owners</Link>}
           {canEdit && <Link href="/locations" className="catalog-nav text-sm underline">Locations</Link>}
           {canEdit && <Link href="/books/move" className="catalog-nav text-sm underline">Move books</Link>}
+          <Link href="/books/labels" className="catalog-nav hidden text-sm underline md:inline-block">Print label range</Link>
           {canEdit && <Link
             href="/books/new"
             className="hidden rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 md:inline-block dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200"
