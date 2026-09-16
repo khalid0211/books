@@ -33,8 +33,8 @@ export async function ensureOwner() {
   return prisma.user.upsert({ where: { email }, create: { email, role: "VIEW" }, update: {} });
 }
 export async function currentUser() {
-  if (!ownerEmail()) return null;
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!ownerEmail()) return null;
   if (!token) return null;
   const session = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
   if (!session || session.expiresAt <= new Date() || !session.user.active) return null;
