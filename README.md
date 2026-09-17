@@ -93,8 +93,9 @@ On the **Add / Edit** screen:
   publication date, pages, language, tags, cover image).
 - **Look up ISBN** does the same from a typed ISBN — no camera needed.
 
-`/api/lookup` queries **Open Library** first (no key, no quota) and fills any gaps
-from **Google Books**. Only empty fields are filled, so your own edits are never
+`/api/lookup` queries **Open Library** first, tries its Search API if the legacy
+Books endpoint misses, and uses **Google Books** if Open Library has no match.
+Only empty fields are filled, so your own edits are never
 overwritten. Year-only publication dates become `YYYY-01-01`.
 
 ### The camera needs HTTPS

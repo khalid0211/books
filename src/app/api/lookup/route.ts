@@ -79,6 +79,24 @@ function parseOpenLibrary(payload: any, isbn: string) {
   };
 }
 
+/** Open Library Search API fallback when the legacy Books endpoint misses. */
+function parseOpenLibrarySearch(payload: any) {
+  const rec = payload?.docs?.[0];
+  if (!rec?.title) return null;
+  return {
+    title: firstStr(rec.title),
+    authors: Array.isArray(rec.author_name) ? rec.author_name.join(", ") || null : null,
+    isbn10: null,
+    isbn13: null,
+    publisher: Array.isArray(rec.publisher) ? firstStr(rec.publisher[0]) : null,
+    publicationDate: normalizePubDate(rec.first_publish_year),
+    pageCount: Number.isFinite(rec.number_of_pages_median) ? Number(rec.number_of_pages_median) : null,
+    language: Array.isArray(rec.language) ? normalizeLanguage(rec.language[0]) : null,
+    tags: Array.isArray(rec.subject) ? rec.subject.slice(0, 6).join(", ") || null : null,
+    coverImageUrl: Number.isInteger(rec.cover_i) ? `https://covers.openlibrary.org/b/id/${rec.cover_i}-L.jpg` : null,
+  };
+}
+
 /** Google Books — richer language/categories/cover, but shared anonymous quota. */
 function parseGoogleBooks(payload: any) {
   const info = payload?.items?.[0]?.volumeInfo;
@@ -115,17 +133,20 @@ export async function GET(req: Request) {
   const isbn13 = isbn.length === 13 ? isbn : isbn10to13(isbn);
   const queryIsbn = isbn13 ?? isbn;
 
-  const [olRaw, gbRaw] = await Promise.all([
-    getOpenLibrary(`https://openlibrary.org/api/books?bibkeys=ISBN:${queryIsbn}&format=json&jscmd=data`),
-    getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${queryIsbn}`),
-  ]);
-
-  const ol = parseOpenLibrary(olRaw.data, queryIsbn);
+  const olRaw = await getOpenLibrary(`https://openlibrary.org/api/books?bibkeys=ISBN:${queryIsbn}&format=json&jscmd=data`);
+  let ol = parseOpenLibrary(olRaw.data, queryIsbn);
+  let searchRaw: JsonResult | null = null;
+  if (!ol) {
+    searchRaw = await getOpenLibrary(`https://openlibrary.org/search.json?isbn=${queryIsbn}&fields=title,author_name,publisher,first_publish_year,number_of_pages_median,language,subject,cover_i&limit=1`);
+    ol = parseOpenLibrarySearch(searchRaw.data);
+  }
+  // Anonymous Google Books requests share a quota. Use it only when Open Library has no match.
+  const gbRaw: JsonResult = ol ? { data: null } : await getJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${queryIsbn}`);
   const gb = parseGoogleBooks(gbRaw.data);
 
   if (!ol && !gb) {
     const failures = [
-      olRaw.error ? `Open Library: ${olRaw.error}` : null,
+      searchRaw?.error ? `Open Library: ${searchRaw.error}` : olRaw.error ? `Open Library: ${olRaw.error}` : null,
       gbRaw.error ? `Google Books: ${gbRaw.error}` : null,
     ].filter(Boolean);
     if (failures.length) {
@@ -152,7 +173,7 @@ export async function GET(req: Request) {
     language: gb?.language ?? ol?.language ?? null,
     tags: ol?.tags ?? gb?.tags ?? null,
     coverImageUrl: gb?.coverImageUrl ?? ol?.coverImageUrl ?? null,
-    subjects: [...new Set<string>([...(Array.isArray(olRaw.data?.[`ISBN:${queryIsbn}`]?.subjects) ? olRaw.data[`ISBN:${queryIsbn}`].subjects.map((s: any) => s?.name).filter((s: unknown): s is string => typeof s === "string") : []), ...(Array.isArray(gbRaw.data?.items?.[0]?.volumeInfo?.categories) ? gbRaw.data.items[0].volumeInfo.categories.filter((s: unknown): s is string => typeof s === "string") : [])])],
+    subjects: [...new Set<string>([...(Array.isArray(olRaw.data?.[`ISBN:${queryIsbn}`]?.subjects) ? olRaw.data[`ISBN:${queryIsbn}`].subjects.map((s: any) => s?.name).filter((s: unknown): s is string => typeof s === "string") : []), ...(Array.isArray(searchRaw?.data?.docs?.[0]?.subject) ? searchRaw.data.docs[0].subject.filter((s: unknown): s is string => typeof s === "string") : []), ...(Array.isArray(gbRaw.data?.items?.[0]?.volumeInfo?.categories) ? gbRaw.data.items[0].volumeInfo.categories.filter((s: unknown): s is string => typeof s === "string") : [])])],
     sources: [ol ? "Open Library" : null, gb ? "Google Books" : null].filter(Boolean) as string[],
   };
 

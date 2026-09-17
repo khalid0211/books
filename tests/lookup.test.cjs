@@ -23,10 +23,11 @@ function route(fetch) {
 const request = { url: 'https://localhost/api/lookup?isbn=978-0-7195-6005-7' };
 const response = (status, body) => ({ ok: status === 200, status, json: async () => body });
 
-test('hyphenated ISBN succeeds after a temporary Open Library failure despite Google quota failure', async () => {
+test('hyphenated ISBN succeeds after a temporary Open Library failure without needing Google', async () => {
   let attempts = 0;
+  let googleCalls = 0;
   const get = route(async url => {
-    if (url.includes('googleapis')) return response(429, {});
+    if (url.includes('googleapis')) { googleCalls++; return response(429, {}); }
     assert.match(url, /ISBN:9780719560057/);
     if (++attempts === 1) throw new Error('timeout');
     return response(200, { 'ISBN:9780719560057': { title: 'Empires of the Indus', authors: [{ name: 'Alice Albinia' }] } });
@@ -36,6 +37,7 @@ test('hyphenated ISBN succeeds after a temporary Open Library failure despite Go
   assert.equal(result.body.title, 'Empires of the Indus');
   assert.equal(result.body.authors, 'Alice Albinia');
   assert.equal(attempts, 2);
+  assert.equal(googleCalls, 0);
 });
 
 test('persistent provider errors are reported as unavailable, not missing', async () => {
@@ -46,9 +48,25 @@ test('persistent provider errors are reported as unavailable, not missing', asyn
   assert.match(result.body.error, /Google Books: request quota/);
 });
 
+test('legacy Open Library 404 falls back to Search without calling Google', async () => {
+  let googleCalls = 0;
+  const get = route(async url => {
+    if (url.includes('/api/books')) return response(404, {});
+    if (url.includes('/search.json')) return response(200, { docs: [{ title: 'Empires of the Indus', author_name: ['Alice Albinia'] }] });
+    googleCalls++;
+    return response(429, {});
+  });
+  const result = await get(request);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.title, 'Empires of the Indus');
+  assert.equal(result.body.authors, 'Alice Albinia');
+  assert.equal(result.body.sources.join(', '), 'Open Library');
+  assert.equal(googleCalls, 0);
+});
+
 test('successful empty searches still return not found without retrying', async () => {
   let calls = 0;
   const get = route(async () => { calls++; return response(200, {}); });
   assert.equal((await get(request)).status, 404);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
