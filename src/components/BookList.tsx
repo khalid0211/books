@@ -131,7 +131,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
             <table className="w-full table-fixed text-sm md:table-auto">
               <thead className="bg-slate-100 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
-                  <th className="w-20 px-2 py-2 font-medium md:w-auto md:px-3"><span className="md:hidden">Book ID</span><span className="hidden md:inline">Book number</span></th><th className="px-2 py-2 font-medium md:px-3">Title</th>
+                  <th className="w-20 px-2 py-0 font-medium md:w-auto md:px-3"><span className="md:hidden">Book ID</span><span className="hidden md:inline">Book number</span></th><th className="px-2 py-0 font-medium md:px-3">Title</th>
                   <th className="hidden px-3 py-2 font-medium md:table-cell">Author(s)</th>
                   <th className="hidden px-3 py-2 font-medium md:table-cell">Book owner</th><th className="hidden px-3 py-2 font-medium md:table-cell">Year</th>
                   <th className="hidden px-3 py-2 font-medium md:table-cell">Shelf</th>
@@ -141,8 +141,8 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {books.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="whitespace-nowrap px-2 py-2 font-mono text-slate-500 md:px-3">{bookNumber(b.id)}</td>
-                    <td className="min-w-0 px-2 py-2 md:px-3 md:break-words">
+                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="whitespace-nowrap px-2 py-0 font-mono text-slate-500 md:px-3">{bookNumber(b.id)}</td>
+                    <td className="min-w-0 px-2 py-0 md:px-3 md:break-words">
                       <Link href={`/books/${b.id}`} title={b.title} className="block truncate font-medium text-slate-900 hover:underline md:overflow-visible md:text-clip md:whitespace-normal dark:text-slate-100">
                         {b.title}
                       </Link>
