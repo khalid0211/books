@@ -128,33 +128,33 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
       ) : (
         <>
           {viewMode === "table" ? <div className="catalog-table overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-            <table className="min-w-[900px] w-full text-sm">
+            <table className="w-full table-fixed text-sm md:table-auto">
               <thead className="bg-slate-100 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Book number</th><th className="px-3 py-2 font-medium">Title</th>
-                  <th className="px-3 py-2 font-medium">Author(s)</th>
-                  <th className="px-3 py-2 font-medium">Book owner</th><th className="px-3 py-2 font-medium">Year</th>
-                  <th className="px-3 py-2 font-medium">Shelf</th>
-                  <th className="px-3 py-2 font-medium">Rating</th>
-                  <th className="px-3 py-2 font-medium text-right">Actions</th>
+                  <th className="w-20 px-2 py-2 font-medium md:w-auto md:px-3"><span className="md:hidden">Book ID</span><span className="hidden md:inline">Book number</span></th><th className="px-2 py-2 font-medium md:px-3">Title</th>
+                  <th className="px-2 py-2 font-medium md:px-3">Author(s)</th>
+                  <th className="hidden px-3 py-2 font-medium md:table-cell">Book owner</th><th className="hidden px-3 py-2 font-medium md:table-cell">Year</th>
+                  <th className="hidden px-3 py-2 font-medium md:table-cell">Shelf</th>
+                  <th className="hidden px-3 py-2 font-medium md:table-cell">Rating</th>
+                  <th className="hidden px-3 py-2 font-medium text-right md:table-cell">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {books.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="whitespace-nowrap px-3 py-2 font-mono text-slate-500">{bookNumber(b.id)}</td>
-                    <td className="px-3 py-2">
+                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="whitespace-nowrap px-2 py-2 font-mono text-slate-500 md:px-3">{bookNumber(b.id)}</td>
+                    <td className="break-words px-2 py-2 md:px-3">
                       <Link href={`/books/${b.id}`} className="font-medium text-slate-900 hover:underline dark:text-slate-100">
                         {b.title}
                       </Link>
-                      <p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[b.bookType, ...(b.categories || []).map((c) => c.name)].filter(Boolean).join(" · ")}</p>
-                      {b.format && <p className="mt-1 text-xs capitalize text-slate-500">{b.format}</p>}
+                      <p className="mt-1 hidden text-xs text-teal-700 md:block dark:text-teal-300">{[b.bookType, ...(b.categories || []).map((c) => c.name)].filter(Boolean).join(" · ")}</p>
+                      {b.format && <p className="mt-1 hidden text-xs capitalize text-slate-500 md:block">{b.format}</p>}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{b.authors || "—"}</td>
-                    <td className="px-3 py-2">{b.owner?.name || "Unassigned"}</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{pubYear(b) || "—"}</td>
-                    <td className="px-3 py-2"><span className="inline-block whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{b.shelfLocation || "Unassigned"}</span></td>
-                    <td className="px-3 py-2"><Stars value={b.rating} /></td>
-                    <td className="px-3 py-2">
+                    <td className="break-words px-2 py-2 text-slate-600 md:px-3 dark:text-slate-300">{b.authors || "—"}</td>
+                    <td className="hidden px-3 py-2 md:table-cell">{b.owner?.name || "Unassigned"}</td>
+                    <td className="hidden px-3 py-2 text-slate-600 md:table-cell dark:text-slate-300">{pubYear(b) || "—"}</td>
+                    <td className="hidden px-3 py-2 md:table-cell"><span className="inline-block whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{b.shelfLocation || "Unassigned"}</span></td>
+                    <td className="hidden px-3 py-2 md:table-cell"><Stars value={b.rating} /></td>
+                    <td className="hidden px-3 py-2 md:table-cell">
                       <div className="flex justify-end gap-2">
                         <Link href={`/books/${b.id}/label`} className="rounded px-2 py-1 underline">Label</Link>
                         <Link href={`/books/${b.id}`} className="rounded px-2 py-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-teal-800">
