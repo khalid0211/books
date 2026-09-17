@@ -211,7 +211,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setSaveNote("Changes saved.");
-      router.push(isEdit ? `/books/${initial!.id}` : "/");
+      router.push("/");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");

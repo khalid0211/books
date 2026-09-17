@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { Book } from "@/lib/books";
 import { pubYear, bookNumber } from "@/lib/books";
 import { filterBooks } from "@/lib/book-filters";
 import Stars from "@/components/Stars";
 
 export default function BookList({ canEdit = false, canDelete = false }: { canEdit?: boolean; canDelete?: boolean }) {
-  const router = useRouter();
   const [allBooks, setBooks] = useState<Book[]>([]);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +99,19 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
             <label className="text-sm">Rating<select value={filters.rating} onChange={(e) => setFilters((f) => ({ ...f, rating: e.target.value }))} className={selectClass}><option value="">All ratings</option><option value="unrated">Not rated</option>{[1,2,3,4,5].map((v) => <option key={v} value={v}>{v} stars and above</option>)}</select></label>
           </div>
         </details>
-        <div className="flex items-center justify-between text-sm text-slate-500"><p role="status">{loading ? "Loading..." : `${books.length} of ${allBooks.length} books`}</p><button onClick={reset} className="px-2 py-2 underline">Reset</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
+          <p role="status">{loading ? "Loading..." : `${books.length} of ${allBooks.length} books`}</p>
+          <div className="flex items-center gap-2">
+            <div role="group" aria-label="Catalog view" className="flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-600">
+              {(["cards", "table"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)} className={`rounded-md px-3 py-1.5 font-medium capitalize ${viewMode === mode ? "bg-teal-700 text-white dark:bg-teal-300 dark:text-slate-950" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <button onClick={reset} className="px-2 py-2 underline">Reset</button>
+          </div>
+        </div>
       </section>
       {error && (
         <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
@@ -116,9 +127,8 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
         </p>
       ) : (
         <>
-          {/* Desktop: table */}
-          <div className="catalog-table hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block dark:border-slate-700 dark:bg-slate-800">
-            <table className="w-full text-sm">
+          {viewMode === "table" ? <div className="catalog-table overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <table className="min-w-[900px] w-full text-sm">
               <thead className="bg-slate-100 text-left text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <tr>
                   <th className="px-3 py-2 font-medium">Book number</th><th className="px-3 py-2 font-medium">Title</th>
@@ -162,15 +172,14 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
                 ))}
               </tbody>
             </table>
-          </div>
+          </div> : null}
 
-          {/* Mobile: cards */}
-          <ul className="space-y-2 md:hidden">
+          {viewMode === "cards" ? <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {books.map((b) => (
               <li key={b.id}>
-                <button
-                  onClick={() => router.push(`/books/${b.id}`)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left active:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:active:bg-slate-700"
+                <Link
+                  href={`/books/${b.id}`}
+                  className="block h-full w-full rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-teal-600 active:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:active:bg-slate-700"
                 >
                   <div className="mb-1 font-mono text-xs text-slate-500">{bookNumber(b.id)}</div><div className="font-semibold">{b.title}</div>
                   <p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[b.bookType, ...(b.categories || []).map((c) => c.name)].filter(Boolean).join(" · ")}</p><div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{b.authors || "Unknown author"}</div><div className="mt-1 text-sm text-slate-500">Owner: {b.owner?.name || "Unassigned"}</div>
@@ -179,10 +188,10 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
                     {b.format && <span className="capitalize">· {b.format}</span>}
                     {b.rating ? <span className="ml-auto"><Stars value={b.rating} /></span> : null}
                   </div>
-                </button>
+                </Link>
               </li>
             ))}
-          </ul>
+          </ul> : null}
         </>
       )}
 

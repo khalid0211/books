@@ -13,9 +13,10 @@ function load(path, dependencies) {
 }
 
 for (const success of [true, false]) {
-  test(`edit save clears busy state after ${success ? 'success on same page' : 'server error'}`, async () => {
+  test(`edit save ${success ? 'returns to the catalog' : 'stays on the form after a server error'}`, async () => {
     const state = [];
     const transitions = [];
+    const navigation = [];
     const books = load('src/lib/books.ts', () => undefined);
     const Form = load('src/components/BookForm.tsx', (name) => {
       if (name === 'react') return {
@@ -27,7 +28,7 @@ for (const success of [true, false]) {
         useMemo: fn => fn(), useRef: value => ({ current: value }), useEffect() {},
       };
       if (name === 'react/jsx-runtime') return require(name);
-      if (name === 'next/navigation') return { useRouter: () => ({ push() {}, refresh() {} }) };
+      if (name === 'next/navigation') return { useRouter: () => ({ push(path) { navigation.push(path); }, refresh() {} }) };
       if (name === '@/lib/books') return books;
       if (name === '@/lib/isbn') return { cleanIsbn: x => x, isValidIsbn: () => false };
       if (name === '@/lib/locations') return {};
@@ -48,5 +49,6 @@ for (const success of [true, false]) {
     assert.ok(saving, 'Submitting should set saving state');
     assert.equal(state[saving.index], false, 'Saving state must reset even when navigation keeps the form mounted');
     assert.ok(state.includes(success ? 'Changes saved.' : 'Save failed'));
+    assert.deepEqual(navigation, success ? ['/'] : []);
   });
 }
