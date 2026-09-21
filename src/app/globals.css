@@ -2,32 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light dark;
-}
-
-html {
-  /* 16px base keeps iOS/Android from zooming when focusing inputs. */
-  font-size: 16px;
-}
-
-body {
-  background: #f5f7f6;
-  color: #13271f;
-  -webkit-font-smoothing: antialiased;
-}
+:root { color-scheme: light dark; }
+html { font-size: 16px; }
+body { background: #f5f7f6; color: #13271f; -webkit-font-smoothing: antialiased; }
 
 @media (prefers-color-scheme: dark) {
-  body {
-    background: #13271f;
-    color: #eaf0ed;
-  }
+  body { background: #13271f; color: #eaf0ed; }
 }
 
 @layer components {
-  .app-primary {
-    @apply bg-teal-700 text-white hover:bg-teal-800 disabled:cursor-not-allowed dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200;
-  }
+  .app-primary { @apply bg-teal-700 text-white hover:bg-teal-800 disabled:cursor-not-allowed dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200; }
 }
 
 @layer base {
@@ -40,28 +24,32 @@ body {
   }
 }
 
-/* Respect the phone's notch / home indicator. */
 @media (min-width: 768px) {
-  .desktop-catalog > header { padding-top: 1.5rem; padding-bottom: 1.5rem; margin-bottom: 1.5rem; }
-  .desktop-catalog .catalog-nav { padding: .65rem .85rem; border-radius: .65rem; text-decoration: none; font-weight: 500; }
-  .desktop-catalog .catalog-nav:hover { background: #eaf0ed; color: #0f766e; }
-  .desktop-catalog input[type="search"] { padding: .85rem 1rem; border-radius: .85rem; }
-  .catalog-table table { min-width: 1050px; }
-  .catalog-table th { padding: 1rem; white-space: nowrap; font-size: .75rem; letter-spacing: .025em; }
-  .catalog-table td { padding: 1rem; vertical-align: middle; }
-  .catalog-table td:nth-child(2) { min-width: 230px; max-width: 350px; overflow-wrap: anywhere; }
-  .catalog-table td:nth-child(3) { min-width: 130px; max-width: 220px; overflow-wrap: anywhere; }
+  .app-content { min-height: 100vh; background: linear-gradient(135deg, #f7faf8 0%, #eef4f1 100%); }
+  .desktop-catalog input[type="search"] { padding: .75rem 1rem; }
+  .catalog-table table { min-width: 1120px; }
+  .catalog-table th { padding: .8rem .75rem; white-space: nowrap; font-size: .7rem; letter-spacing: .045em; text-transform: uppercase; }
+  .catalog-table td { padding: .9rem .75rem; vertical-align: middle; }
+  .catalog-table-compact td { padding-top: .45rem; padding-bottom: .45rem; }
+  .catalog-table-compact td > div.relative { height: 2.5rem; width: 1.8rem; }
+  .catalog-table th:first-child, .catalog-table td:first-child { width: 42px; text-align: center; }
+  .catalog-table th:nth-child(2), .catalog-table td:nth-child(2) { width: 58px; }
+  .catalog-table td:nth-child(4) { min-width: 220px; max-width: 360px; overflow-wrap: anywhere; }
+  .catalog-table td:nth-child(5) { min-width: 140px; max-width: 240px; overflow-wrap: anywhere; }
   .catalog-table td:last-child a, .catalog-table td:last-child button { white-space: nowrap; text-decoration: none; }
   .desktop-book-form > header { padding-top: 1.25rem; padding-bottom: 1.25rem; }
   .desktop-book-form h1 { font-size: 1.75rem; letter-spacing: -.025em; }
-  .desktop-book-form > form { border: 1px solid #d6e1dc; border-radius: 1rem; background: white; padding: 1.75rem; gap: 1.5rem; box-shadow: 0 2px 8px #13271f05; }
+  .desktop-book-form > form { border: 1px solid #d6e1dc; border-radius: 1rem; background: white; padding: 1.75rem; gap: 1.5rem; box-shadow: 0 2px 8px #13271f0a; }
   .desktop-book-form > div.mb-5 { padding: 1.5rem; border-radius: 1rem; }
   @media (prefers-color-scheme: dark) {
-    .desktop-catalog .catalog-nav:hover { background: #30493e; color: #99f6e4; }
+    .app-content { background: linear-gradient(135deg, #13271f 0%, #172f25 100%); }
     .desktop-book-form > form { background: #20382e; border-color: #30493e; }
   }
 }
 
-.safe-bottom {
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+@media print {
+  .desktop-sidebar, .account-bar { display: none !important; }
+  .app-shell, .app-content { display: block !important; min-height: 0 !important; background: white !important; }
 }
+
+.safe-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }

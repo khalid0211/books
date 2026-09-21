@@ -37,7 +37,6 @@ export default function BookLabel({ id, title, owner }: { id: number; title: str
     <style>{`@media print {
       @page { size: ${paperWidth} ${paperHeight}; margin: 0; }
       html, body { width: ${paperWidth} !important; height: ${paperHeight} !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: white !important; }
-      body > :not(.label-page) { display: none !important; }
       .label-page { display: block !important; width: ${paperWidth} !important; height: ${paperHeight} !important; max-width: none !important; margin: 0 !important; padding: 0 !important; break-inside: avoid; overflow: hidden; }
       .label-controls { display: none !important; }
       .book-label-image { display: block !important; width: ${paperWidth} !important; height: ${paperHeight} !important; max-width: none !important; border: 0 !important; margin: 0 !important; break-inside: avoid; print-color-adjust: exact; }

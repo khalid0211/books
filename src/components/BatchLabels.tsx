@@ -36,7 +36,6 @@ export default function BatchLabels({ books }: { books: LabelBook[] }) {
     <style>{`@media print {
       @page { size: 50.8mm 25.4mm; margin: 0; }
       html, body { width: 50.8mm !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; background: white !important; }
-      body > :not(.batch-label-page) { display: none !important; }
       .batch-label-page { display: block !important; width: 50.8mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
       .batch-label-controls { display: none !important; }
       .batch-label-list { display: block !important; margin: 0 !important; padding: 0 !important; }
