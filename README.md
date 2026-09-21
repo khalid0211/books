@@ -202,6 +202,10 @@ with an empty catalog. The container stores its SQLite database at
 Without that mount, books added on the VPS can be lost when Coolify replaces the
 container. The local `prisma/dev.db` is deliberately excluded from the image.
 The first start creates the tables and starter categories automatically.
+For established installations, the image refuses to start if `/data/books.db` is
+missing or invalid. Before each startup schema check, it keeps a consistent
+snapshot under `/data/deploy-backups/` and retains the five newest snapshots.
+This prevents a missing volume mount from silently starting an empty catalog.
 
 1. In Coolify, create an **Application** from the GitHub repository. Choose the
    **Dockerfile** build pack, branch containing this Dockerfile, base directory

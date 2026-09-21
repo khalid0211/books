@@ -17,9 +17,10 @@ RUN npm run build
 
 ENV NODE_ENV=production \
     DATABASE_URL=file:/data/books.db \
+    REQUIRE_EXISTING_DATABASE=true \
     PORT=3000
 
 EXPOSE 3000
 
 # Initialize the persistent database and starter categories before Next.js starts.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push && node scripts/seed-categories.cjs && exec npm start"]
+CMD ["sh", "-c", "node scripts/prepare-production-db.cjs && node node_modules/prisma/build/index.js db push && node scripts/seed-categories.cjs && exec npm start"]
