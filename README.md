@@ -175,10 +175,24 @@ For a fresh installation, stop the server, run `npm run db:push` followed by
 classifying any books. Existing installations should back up the database first
 (for the default SQLite path, `python scripts/backup-classification.py`).
 
-## Backups
+## Database backup and restore
 
-The whole database is `prisma/dev.db`. Copy it somewhere safe on a schedule
-(`copy prisma\dev.db backups\dev-%date%.db`).
+The Owner can open **Backup & restore** from the desktop header:
+
+- **Download database backup** uses SQLite's online snapshot operation and saves
+  a dated `.db` file to the PC while the application remains available.
+- **Restore database** accepts one of these `.db` files, verifies its SQLite
+  integrity and required application tables, then replaces the live database.
+  Restoring requires typing `RESTORE` and confirming in the browser.
+- Before every restore, the app retains the previous database beside the live
+  database with a `.before-restore-<timestamp>-<id>.bak` name. On the VPS this is
+  stored in the persistent `/data` volume. Remove older safety copies manually
+  when they are no longer needed.
+
+Only the configured Owner can access either operation. A restore replaces books,
+locations, owners, users, and sessions with the contents of the selected backup.
+Keep downloaded backups in a separate safe location; the VPS volume alone is not
+a complete backup strategy.
 
 ## Deploy on a VPS with Coolify
 

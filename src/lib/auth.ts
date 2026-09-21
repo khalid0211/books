@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { databaseRestoreRunning } from "@/lib/database-file";
 
 export const SESSION_COOKIE = "book_session";
 export const SESSION_SECONDS = 30 * 24 * 60 * 60;
@@ -33,6 +34,7 @@ export async function ensureOwner() {
   return prisma.user.upsert({ where: { email }, create: { email, role: "VIEW" }, update: {} });
 }
 export async function currentUser() {
+  if (databaseRestoreRunning()) return null;
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!ownerEmail()) return null;
   if (!token) return null;
@@ -49,6 +51,7 @@ export async function requirePage(roles = READ) {
   return user;
 }
 export async function authorize(req: Request, roles = READ) {
+  if (databaseRestoreRunning()) return NextResponse.json({ error: "Database restore in progress. Try again shortly." }, { status: 503 });
   if (!["GET", "HEAD"].includes(req.method)) {
     if (!sameOrigin(req)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   }
