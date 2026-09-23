@@ -9,6 +9,7 @@ model User {
   active Boolean @default(true)
   createdAt DateTime @default(now())
   sessions Session[]
+  loans Loan[]
 }
 
 model Session {
@@ -67,6 +68,7 @@ model BookOwner {
 }
 
 model Book {
+  loans Loan[]
   bookType String?
   categories Category[]
   ownerId Int?
@@ -101,4 +103,20 @@ model Category {
   name String
   nameKey String @unique
   books Book[]
+}
+
+model Loan {
+  id Int @id @default(autoincrement())
+  bookId Int
+  book Book @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  borrowerId Int
+  borrower User @relation(fields: [borrowerId], references: [id], onDelete: Restrict)
+  // Cleared on return. The unique key prevents concurrent checkouts of one copy.
+  activeBookId Int? @unique
+  borrowedAt DateTime
+  dueAt DateTime
+  returnedAt DateTime?
+  reminderAttemptAt DateTime?
+  reminderSentAt DateTime?
+  @@index([returnedAt, dueAt])
 }

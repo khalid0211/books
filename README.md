@@ -256,3 +256,33 @@ image, so Git deployments never move local books onto the VPS automatically.
 Use **Book owners** on the catalog to add or rename people whose books are in the library. Owner and Librarian accounts can manage this list. Book ownership is separate from login accounts and grants no application access.
 
 Choose a **Book owner** on the Add / Edit book form. Existing books start Unassigned. Owner names appear on desktop and phone lists and are included in catalog search. Duplicate names are rejected regardless of capitalization or extra spaces. Renaming a person updates the displayed name for all associated books.
+
+## Borrowing and returns
+
+Owner and Librarian accounts can open **Borrowing & returns** from the desktop
+sidebar or phone catalog. Select an active View or Librarian account, check the
+borrowing date/time, and set the borrow time (15 days by default). The return
+date updates automatically. Days are 24-hour periods; dates display in the
+device's local time and are stored in UTC.
+
+Scan the copy's library label with **Scan & lend**, or enter its book ID and
+select **Record borrowing**. USB/Bluetooth keyboard scanners can submit with
+Enter; phone cameras require HTTPS. ISBNs cannot identify individual copies.
+Scanning immediately records the action with the selected settings. A copy
+cannot have two active loans.
+
+Use **Currently borrowed** or **Overdue** to search by book, ID, or borrower.
+**Send reminder email** sends an overdue reminder using the existing SMTP
+settings, only when clicked. Successful sends show a timestamp; delivery
+failures show an error, and reminders have a one-minute retry interval.
+
+For returns, choose **Return a book**, optionally select a different shelf, then
+scan or enter the book ID. The confirmation identifies the shelf where the book
+belongs. A valid existing shelf is required. The loan closes and shelf updates
+together. Recent returns retain the borrowing, due, and actual return times.
+Books with loan history cannot be deleted, preserving that history.
+
+This feature adds the `Loan` table: back up the database, stop the local server,
+run `npm run db:push`, and restart. Coolify applies the schema during normal
+startup after its automatic backup. Backups predating this feature must have
+their schema upgraded before they can be restored through the app.

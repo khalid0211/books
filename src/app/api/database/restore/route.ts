@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const MAX_BACKUP_BYTES = 256 * 1024 * 1024;
-const REQUIRED_TABLES = ["Book", "BookOwner", "Cabinet", "Category", "LoginCode", "Room", "Session", "Shelf", "User", "_BookToCategory"];
+const REQUIRED_TABLES = ["Book", "BookOwner", "Cabinet", "Category", "Loan", "LoginCode", "Room", "Session", "Shelf", "User", "_BookToCategory"];
 
 async function validateBackup(file: string) {
   const handle = await open(file, "r");

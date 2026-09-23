@@ -70,7 +70,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
     if (response.ok) {
       setBooks((current) => current.filter((book) => book.id !== id));
       setSelected((current) => { const next = new Set(current); next.delete(id); return next; });
-    } else alert("Failed to delete.");
+    } else { const data = await response.json().catch(() => ({})); alert(data.error || "Failed to delete."); }
   }
 
   const summaries = [
@@ -85,6 +85,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="w-full md:w-auto"><p className="mb-1 hidden text-xs font-semibold uppercase tracking-[.16em] text-teal-700 md:block dark:text-teal-300">Collection workspace</p><h1 className="text-xl font-semibold tracking-tight md:text-3xl">Book Catalog</h1><p className="mt-1 hidden text-sm text-slate-500 md:block">Search, organize, and maintain your personal library.</p></div>
         <div className="flex flex-wrap items-center gap-3 md:hidden">
+          {canEdit && <Link href="/loans" className="text-sm underline">Borrowing & returns</Link>}
           {canEdit && <Link href="/classify" className="text-sm underline">Classify books</Link>}
           {canEdit && <Link href="/owners" className="text-sm underline">Book owners</Link>}
           {canEdit && <Link href="/locations" className="text-sm underline">Locations</Link>}

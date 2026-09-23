@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 type Item = { href: string; label: string; roles?: string[] };
 
 const library: Item[] = [
+  { href: "/loans", label: "Borrowing & returns", roles: ["OWNER", "LIBRARIAN"] },
   { href: "/", label: "Catalog" },
   { href: "/books/new", label: "Add book", roles: ["OWNER", "LIBRARIAN"] },
   { href: "/books/move", label: "Move books", roles: ["OWNER", "LIBRARIAN"] },

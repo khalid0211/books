@@ -67,6 +67,9 @@ export async function DELETE(req: Request, ctx: Ctx) {
     await prisma.book.delete({ where: { id } });
     return new NextResponse(null, { status: 204 });
   } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+      return NextResponse.json({ error: "This book has borrowing history and cannot be deleted." }, { status: 409 });
+    }
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
