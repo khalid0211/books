@@ -7,9 +7,23 @@ export default function DatabaseManager() {
   const [file, setFile] = useState<File | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [restoring, setRestoring] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  async function exportAirtable() {
+    setExporting(true); setMessage(""); setError("");
+    try {
+      const response = await fetch("/api/database/airtable", { method: "POST" });
+      const result = await response.json().catch(() => ({})) as { error?: string; totals?: { created: number; updated: number; skipped: number } };
+      if (!response.ok || !result.totals) throw new Error(result.error || "Could not export to Airtable.");
+      setMessage(`Airtable export complete: ${result.totals.created} created, ${result.totals.updated} updated, and ${result.totals.skipped} unchanged.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not export to Airtable.");
+    } finally {
+      setExporting(false);
+    }
+  }
   async function restore(event: FormEvent) {
     event.preventDefault();
     if (!file || confirmation !== "RESTORE") return;
@@ -43,6 +57,11 @@ export default function DatabaseManager() {
       <a href="/api/database/backup" download className="inline-block rounded-lg bg-teal-700 px-4 py-3 font-medium text-white dark:bg-teal-300 dark:text-slate-950">Download database backup</a>
     </section>
 
+    <section className="space-y-3 rounded-xl border border-sky-200 bg-white p-5 dark:border-sky-900 dark:bg-slate-800">
+      <h2 className="text-xl font-semibold">Export to Airtable</h2>
+      <p>Sends new and changed records to Airtable. Unchanged records are skipped, and Airtable records are never deleted automatically.</p>
+      <button type="button" onClick={exportAirtable} disabled={exporting || restoring} className="rounded-lg bg-sky-700 px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-300 dark:text-slate-950">{exporting ? "Exporting..." : "Export new and changed data"}</button>
+    </section>
     <section className="space-y-3 rounded-xl border border-red-200 bg-white p-5 dark:border-red-900 dark:bg-slate-800">
       <h2 className="text-xl font-semibold">Restore backup</h2>
       <p>Restoring replaces the current VPS database with the selected backup. A safety copy of the current database is retained on the VPS.</p>

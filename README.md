@@ -194,6 +194,22 @@ locations, owners, users, and sessions with the contents of the selected backup.
 Keep downloaded backups in a separate safe location; the VPS volume alone is not
 a complete backup strategy.
 
+## Airtable incremental export
+
+The Owner can export Books, Book Owners, Categories, Rooms, Cabinets, Shelves,
+Users, and Loans from **Backup & restore**. New records are created, changed
+records are updated, and unchanged records are skipped. The export never deletes
+Airtable records. Login codes and session tokens are excluded.
+
+Add these runtime environment variables in Coolify:
+
+```text
+AIRTABLE_TOKEN=<personal access token with data.records:read and data.records:write>
+AIRTABLE_BASE_ID=<base id beginning with app>
+```
+
+Keep the Airtable table and field names unchanged. Continue downloading SQLite
+backups for complete database restoration.
 ## Deploy on a VPS with Coolify
 
 This repository includes a `Dockerfile` for Coolify. A new VPS installation starts
