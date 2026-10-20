@@ -156,6 +156,9 @@ model BookEnrichmentRevision {
   olDescription String?
   olSourceUrl String?
   sourceSnapshot String
+  sourceType String @default("legacy")
+  modelIdentityStatus String?
+  olIdentityStatus String?
   identityStatus String
   knowledgeLevel String
   overview String?

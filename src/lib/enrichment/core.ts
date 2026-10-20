@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-export const PROMPT_VERSION = "catalogue-v1";
+export const PROMPT_VERSION = "catalogue-v2-model-fallback";
 export const MAX_OUTPUT_TOKENS = 2400;
 export class EnrichmentError extends Error {
   constructor(message: string, public retryable = false, public retryAfterMs = 0) { super(message); }

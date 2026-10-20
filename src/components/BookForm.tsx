@@ -18,7 +18,7 @@ import ClassificationPicker from "@/components/ClassificationPicker";
 import BookEnrichmentPanel from "@/components/BookEnrichmentPanel";
 import { suggestClassification, type CategoryChoice, type Classification } from "@/lib/classification";
 
-type Props = { initial?: Book; canDelete?: boolean };
+type Props = { initial?: Book; canDelete?: boolean; returnTo?: string };
 
 const MAIN_FIELDS = ["title", "authors", "tags", "shelfLocation"];
 const DETAIL_FIELDS = ["publisher", "publicationDate", "edition", "language", "pageCount", "format"];
@@ -42,7 +42,7 @@ const LOOKUP_FIELDS: (keyof BookInput)[] = [
   "coverImageUrl",
 ];
 
-export default function BookForm({ initial, canDelete = false }: Props) {
+export default function BookForm({ initial, canDelete = false, returnTo = "/" }: Props) {
   const router = useRouter();
   const isEdit = Boolean(initial);
   const [categories, setCategories] = useState<CategoryChoice[]>([]);
@@ -212,7 +212,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setSaveNote("Changes saved.");
-      router.push("/");
+      router.push(returnTo);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
@@ -227,7 +227,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
     setSaving(true);
     const res = await fetch(`/api/books/${initial.id}`, { method: "DELETE" });
     if (res.ok) {
-      router.push("/");
+      router.push(returnTo);
       router.refresh();
     } else {
       setError("Failed to delete");
@@ -243,7 +243,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
       {scanning && <IsbnScanner onDetected={onScanDetected} onClose={() => setScanning(false)} />}
 
       <header className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <Link href="/" className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
+        <Link href={returnTo} className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">
           ‹ Catalog
         </Link>
         <h1 className="text-lg font-semibold">{isEdit ? "Edit book" : "Add book"}</h1>
@@ -413,7 +413,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
           )}
         </div>
       </form>
-      {initial && <BookEnrichmentPanel bookId={initial.id} owner={canDelete} />}
+      {initial && <BookEnrichmentPanel bookId={initial.id} owner={canDelete} returnTo={returnTo} />}
     </div>
   );
 }

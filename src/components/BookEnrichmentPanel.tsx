@@ -2,11 +2,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 type Concept = { id: number; originalTerm: string; proposedName: string; weight: number; perspective: string | null; reviewStatus: string; concept: { name: string } | null };
-type Revision = { id: number; overview: string | null; centralIdea: string | null; olDescription: string | null; olSourceUrl: string | null; olWorkId: string | null; olEditionId: string | null; knowledgeLevel: string; identityStatus: string; limitations: string; model: string; createdAt: string; reviewStatus: string; stale: boolean; concepts: Concept[] };
+type Revision = { sourceType: string; sourceLabel: string; modelIdentityStatus: string | null; olIdentityStatus: string | null; id: number; overview: string | null; centralIdea: string | null; olDescription: string | null; olSourceUrl: string | null; olWorkId: string | null; olEditionId: string | null; knowledgeLevel: string; identityStatus: string; limitations: string; model: string; createdAt: string; reviewStatus: string; stale: boolean; concepts: Concept[] };
 type Data = { manuallyLocked: boolean; publishedRevisionId: number | null; revisions: Revision[] };
 type Edit = { id: number; name: string; weight: number; perspective: string; suppressed: boolean; saveAlias: boolean };
 const input = "block w-full rounded-lg border border-slate-400 bg-transparent p-2";
-export default function BookEnrichmentPanel({ bookId, owner = false }: { bookId: number; owner?: boolean }) {
+export default function BookEnrichmentPanel({ bookId, owner = false, returnTo = "/" }: { bookId: number; owner?: boolean; returnTo?: string }) {
   const [data, setData] = useState<Data | null>(null), [selected, setSelected] = useState<number | null>(null);
   const [overview, setOverview] = useState(""), [centralIdea, setCentralIdea] = useState(""), [concepts, setConcepts] = useState<Edit[]>([]), [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -24,6 +24,9 @@ export default function BookEnrichmentPanel({ bookId, owner = false }: { bookId:
     {!revision ? <p>No published additional information yet.</p> : <>
       {revision.stale && <p role="status" className="text-amber-700">Catalogue identity changed since generation. Regenerate before publishing.</p>}
       <p className="text-sm">AI-generated · {revision.model} · {new Date(revision.createdAt).toLocaleString()} · knowledge: {revision.knowledgeLevel} · identity: {revision.identityStatus}</p>
+      <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-950">{revision.sourceLabel}</p>
+      {owner && revision.modelIdentityStatus && <p className="text-sm">Open Library match: {revision.olIdentityStatus || "Not recorded"} · Model's identity assessment: {revision.modelIdentityStatus} (not external verification)</p>}
+      {owner && !revision.overview && <p className="text-sm">This attempt did not produce a usable overview. This does not establish that information is unavailable. Check the title, author and limitations; then retry the single-book range with regeneration enabled.</p>}
       {revision.olDescription && <div><h3 className="font-semibold">Open Library description</h3><p className="whitespace-pre-wrap">{revision.olDescription}</p>{revision.olSourceUrl?.startsWith("https://openlibrary.org/") && <a href={revision.olSourceUrl} target="_blank" rel="noreferrer" className="underline">Open Library source</a>}</div>}
       {owner && (revision.olWorkId || revision.olEditionId) && <p className="text-sm">{revision.olWorkId} {revision.olEditionId}</p>}
       {owner ? <><label className="block">AI overview<textarea rows={5} maxLength={4000} value={overview} onChange={e => setOverview(e.target.value)} className={input} /></label><label className="block">Central idea / theme<textarea rows={2} maxLength={1500} value={centralIdea} onChange={e => setCentralIdea(e.target.value)} className={input} /></label>
@@ -37,6 +40,7 @@ export default function BookEnrichmentPanel({ bookId, owner = false }: { bookId:
         <button type="button" disabled={busy || !confirmed || revision.stale || revision.knowledgeLevel === "insufficient" || !overview.trim()} className="rounded-lg bg-teal-700 px-4 py-2 text-white disabled:opacity-50" onClick={() => void action({ action: "publish", revisionId: revision.id, identityConfirmed: confirmed, overview, centralIdea, concepts })}>Save corrections and publish · locks regeneration</button>
       </> : <><div><h3 className="font-semibold">AI overview</h3><p className="whitespace-pre-wrap">{revision.overview}</p></div>{revision.centralIdea && <div><h3 className="font-semibold">Central idea / theme</h3><p>{revision.centralIdea}</p></div>}<div className="flex flex-wrap gap-2">{revision.concepts.filter(c => c.reviewStatus === "approved").map(c => <span key={c.id} title={c.perspective || ""} className="rounded-full bg-teal-100 px-3 py-1 text-teal-950">{c.concept?.name || c.proposedName}</span>)}</div></>}
       <p className="text-sm text-slate-500">{revision.limitations}</p>
+      <Link href={returnTo} className="inline-block underline">Back to catalogue results</Link>
     </>}</>}
   </section>;
 }

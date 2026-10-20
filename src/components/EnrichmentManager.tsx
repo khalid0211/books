@@ -27,7 +27,7 @@ export default function EnrichmentManager() {
   function changeRange() { setPreview(null); }
   return <main className="mx-auto max-w-4xl space-y-6 px-4 py-6">
     <Link href="/" className="underline">‹ Books</Link><h1 className="text-2xl font-semibold">Enrich books</h1>
-    <p>Retrieve Open Library descriptions and create AI overviews and concepts. Results stay as drafts until you review and publish them on each book.</p>
+    <p>Retrieve Open Library descriptions and create AI overviews and concepts. If no matched description is available, OpenAI can use its own knowledge of the title and author, with a clear AI-only source label. Results stay as drafts until you review and publish them on each book.</p>
     {error && <p role="alert" className="rounded-lg bg-red-100 p-3 text-red-900">{error}</p>}{message && <p role="status">{message}</p>}
     {settings && <section className="space-y-4 rounded-xl border p-4"><h2 className="text-xl font-semibold">OpenAI settings · Owner only</h2>
       {!settings.encryptionReady && <p>Set ENRICHMENT_SECRET on the server before saving an API key. See the deployment instructions.</p>}

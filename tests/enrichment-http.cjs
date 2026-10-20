@@ -43,6 +43,8 @@ async function main() {
     const input = { model: 'test-model', apiKey: 'test-key-12345678901234567890', inputRate: 1, outputRate: 4, budgetUsd: 1, maxBooks: 10 };
     assert.equal((await request('/api/enrichment/settings', 'OWNER', input, true)).status, 403);
     let response = await request('/api/enrichment/settings', 'OWNER', input); assert.equal(response.status, 200); const settings = await response.json(); assert(settings.keyUsable); assert(!JSON.stringify(settings).includes(input.apiKey)); assert(!('encryptedKey' in settings));
+    response = await request('/api/books', 'OWNER'); assert.equal((await response.json())[0].enrichmentStatus, 'not_enriched');
+    for (const role of ['VIEW', 'LIBRARIAN']) { response = await request('/api/books', role); assert(!('enrichmentStatus' in (await response.json())[0])); }
     response = await request('/api/enrichment/preview', 'OWNER', { start: 'B0001', end: 'B0010' }); assert.equal(response.status, 200); const preview = await response.json(); assert.equal(preview.eligible, 1); assert.equal(preview.missing, 9);
     response = await request('/api/enrichment/jobs', 'OWNER', { start: 'B0001', end: 'B0010' }); assert.equal(response.status, 201); const job = await response.json();
     assert.equal((await request('/api/enrichment/control', 'OWNER', { id: job.id, action: 'pause' })).status, 200);
@@ -54,8 +56,17 @@ async function main() {
       await new Promise(r => setTimeout(r, 500));
     }
     assert(workerStarted, 'Next instrumentation must start the durable worker');
-    for (const url of ['/enrichment', `/books/${book.id}`, '/database']) { response = await request(url, 'OWNER'); assert.equal(response.status, 200); const text = await response.text(); assert(!text.includes(input.apiKey)); }
+    const fingerprintInput = { title: book.title, authors: book.authors, isbn10: null, isbn13: null, publicationDate: null, edition: null, language: null };
+    const draft = await db.bookEnrichment.create({ data: { bookId: book.id, revisions: { create: { inputFingerprint: crypto.createHash('sha256').update(JSON.stringify(fingerprintInput)).digest('hex'), inputSnapshot: JSON.stringify(fingerprintInput), sourceSnapshot: '{}', identityStatus: 'verified', knowledgeLevel: 'high', overview: 'A draft overview for review.', limitations: 'AI-generated; not full-text verified.', model: 'test-model', promptVersion: 'test' } } }, include: { revisions: true } });
+    response = await request('/api/books', 'OWNER'); assert.equal((await response.json())[0].enrichmentStatus, 'needs_review');
     response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.deepEqual((await response.json()).revisions, []);
+    const returnTo = '/?enrichment=needs_review&sort=id&dir=asc';
+    response = await request(`/books/${book.id}?returnTo=${encodeURIComponent(returnTo)}`, 'OWNER'); assert((await response.text()).includes('href="/?enrichment=needs_review'));
+    response = await request(`/api/books/${book.id}/enrichment`, 'OWNER', { action: 'publish', revisionId: draft.revisions[0].id, identityConfirmed: true, overview: 'An approved overview.', centralIdea: '', concepts: [] }); assert.equal(response.status, 200);
+    response = await request('/api/books', 'OWNER'); assert.equal((await response.json())[0].enrichmentStatus, 'published');
+    for (const url of ['/enrichment', `/books/${book.id}`, '/database']) { response = await request(url, 'OWNER'); assert.equal(response.status, 200); const text = await response.text(); assert(!text.includes(input.apiKey)); }
+    response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.equal((await response.json()).revisions[0].overview, 'An approved overview.');
+    response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.match((await response.json()).revisions[0].sourceLabel, /no matched Open Library description/);
     // Owner backup endpoint includes every new table; restore exercises staging, session preservation and paused jobs.
     response = await request('/api/database/backup', 'OWNER'); assert.equal(response.status, 200); const bytes = await response.arrayBuffer(); assert(Buffer.from(bytes).subarray(0, 16).toString().startsWith('SQLite format 3'));
     const form = new FormData(); form.set('confirmation', 'RESTORE'); form.set('backup', new Blob([bytes]), 'catalogue.db');

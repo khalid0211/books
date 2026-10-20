@@ -25,11 +25,13 @@ const service = require('../src/lib/enrichment/service.ts');
 const worker = require('../src/lib/enrichment/worker.ts');
 const { upgradeStagedBackup } = require('../src/lib/enrichment/restore.ts');
 const { enrichmentBookFields } = require('../src/lib/enrichment/airtable.ts');
+const { catalogueEnrichmentStatus } = require('../src/lib/enrichment/catalogue-status.ts');
+const { enrichmentSourceLabel, enrichmentSourceType } = require('../src/lib/enrichment/provenance.ts');
 const nativeFetch = global.fetch;
 const baseBook = { title: 'Example Book', authors: 'Example Author', isbn10: null, isbn13: null, publicationDate: null, edition: null, language: null };
 const output = { identity_match: 'confirmed', knowledge_level: 'high', overview: 'A model-generated overview of the correct book.', central_idea: 'How judgement works.', limitations: 'AI-generated from metadata and model knowledge, not full-text verified.', concepts: [{ name: 'Intuition', salience: .9, perspective: 'Examines intuitive judgement.' }, { name: 'Cognitive bias', salience: .8, perspective: 'Examines errors.' }, { name: 'Decision making', salience: .6, perspective: null }] };
 function json(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
-let apiCalls = 0, failProvider = false, beforeProvider = null;
+let apiCalls = 0, failProvider = false, beforeProvider = null, responseOutput = output;
 function fakeFetch(url, init) {
   if (String(url).startsWith('https://openlibrary.org/search.json')) return Promise.resolve(json({ docs: [{ key: '/works/OL1W', title: baseBook.title, author_name: [baseBook.authors] }] }));
   if (url === 'https://openlibrary.org/works/OL1W.json') return Promise.resolve(json({ key: '/works/OL1W', title: baseBook.title, description: { value: 'A public catalogue description.' } }));
@@ -40,7 +42,7 @@ function fakeFetch(url, init) {
     return Promise.resolve().then(async () => {
       if (beforeProvider) await beforeProvider();
       if (failProvider) return json({}, 429);
-      return json({ status: 'completed', usage: { input_tokens: 300, output_tokens: 150 }, output: [{ content: [{ type: 'output_text', text: JSON.stringify(output) }] }] });
+      return json({ status: 'completed', usage: { input_tokens: 300, output_tokens: 150 }, output: [{ content: [{ type: 'output_text', text: JSON.stringify(responseOutput) }] }] });
     });
   }
   throw Error('Unexpected network call: ' + url);
@@ -70,6 +72,17 @@ test('encryption, normalization, identity, output validation and fingerprints', 
   assert.notEqual(core.fingerprint(baseBook), core.fingerprint({ ...baseBook, authors: 'Other Author' }));
 });
 
+test('catalogue approval status distinguishes drafts, publication, stale identity and insufficient data', () => {
+  const revision = { id: 10, inputFingerprint: core.fingerprint(baseBook), knowledgeLevel: 'high', overview: 'Overview', reviewStatus: 'needs_review' };
+  assert.equal(catalogueEnrichmentStatus(baseBook, undefined), 'not_enriched');
+  assert.equal(catalogueEnrichmentStatus(baseBook, { publishedRevisionId: null, revisions: [revision] }), 'needs_review');
+  assert.equal(catalogueEnrichmentStatus(baseBook, { publishedRevisionId: 10, revisions: [{ ...revision, reviewStatus: 'approved' }] }), 'published');
+  assert.equal(catalogueEnrichmentStatus(baseBook, { publishedRevisionId: null, revisions: [{ ...revision, reviewStatus: 'approved' }] }), 'needs_review');
+  assert.equal(catalogueEnrichmentStatus(baseBook, { publishedRevisionId: null, revisions: [{ ...revision, knowledgeLevel: 'insufficient', overview: null }] }), 'insufficient');
+  assert.equal(catalogueEnrichmentStatus({ ...baseBook, authors: 'Different Author' }, { publishedRevisionId: 10, revisions: [revision] }), 'stale');
+  assert.equal(catalogueEnrichmentStatus(baseBook, { publishedRevisionId: 10, revisions: [{ ...revision, id: 11 }, { ...revision, reviewStatus: 'approved' }] }), 'needs_review');
+});
+
 test('catalogue range, draft generation, owner correction, publication, locking and Airtable fields', async () => {
   await service.saveSettings({ model: 'test-model', apiKey: 'test-key-12345678901234567890', inputRate: 1, outputRate: 4, budgetUsd: 1, maxBooks: 10 });
   const settings = await service.settingsPublic(); assert(settings.keyUsable); assert(!('encryptedKey' in settings));
@@ -85,6 +98,7 @@ test('catalogue range, draft generation, owner correction, publication, locking 
   assert.equal((await service.readEnrichment(a.id, false)).revisions.length, 0);
   const draft = (await service.readEnrichment(a.id, true)).revisions[0]; assert.equal(draft.identityStatus, 'verified');
   assert.equal(draft.olDescription, 'A public catalogue description.'); assert.equal(draft.concepts.length, 3);
+  assert.equal(draft.sourceType, 'open_library_description'); assert.equal(draft.modelIdentityStatus, 'confirmed'); assert.equal(draft.olIdentityStatus, 'verified');
   const edit = { action: 'publish', revisionId: draft.id, identityConfirmed: true, overview: 'Owner-corrected overview.', centralIdea: 'Corrected central idea.', concepts: draft.concepts.map((c, i) => ({ id: c.id, name: i === 0 ? 'Intuitive judgement' : c.proposedName, weight: c.weight, perspective: c.perspective || '', suppressed: i === 2, saveAlias: i === 0 })) };
   await assert.rejects(service.reviewEnrichment(a.id, { ...edit, identityConfirmed: false }), /Confirm/);
   await assert.rejects(service.reviewEnrichment(a.id, { ...edit, concepts: edit.concepts.map((c, i) => i === 1 ? { ...c, name: edit.concepts[0].name } : c) }), /same canonical concept/);
@@ -100,6 +114,48 @@ test('catalogue range, draft generation, owner correction, publication, locking 
   assert.equal((await service.readEnrichment(a.id, false)).revisions.length, 0);
   await assert.rejects(service.reviewEnrichment(a.id, edit), /identity changed/);
   row = { ...row, title: 'Changed identity' }; assert.equal(enrichmentBookFields(row)['AI Overview'], null); assert.equal(enrichmentBookFields(row)['Enrichment Status'], 'stale');
+});
+
+test('model-only fallback retains confident output without a source description, but still withholds unknown or ambiguous model identities', async () => {
+  for (const scenario of ['missing', 'ambiguous-source', 'no-description', 'unknown-model', 'ambiguous-model']) {
+    const book = await db.book.create({ data: { ...baseBook, title: 'War', authors: 'Bob Woodward', isbn13: '9781398541474', publicationDate: '2025-10-09' } });
+    let outbound;
+    global.fetch = async (url, init) => {
+      if (String(url).includes('/isbn/')) return json({}, 404);
+      if (String(url).includes('/search.json')) return json({ docs: scenario === 'ambiguous-source' ? [{ key: '/works/OL2W', title: 'War', author_name: ['Different Author'] }] : scenario === 'no-description' ? [{ key: '/works/OL3W', title: 'War', author_name: ['Bob Woodward'] }] : [] });
+      if (String(url).includes('/works/OL3W.json')) return json({ key: '/works/OL3W', title: 'War' });
+      outbound = JSON.parse(init.body);
+      return fakeFetch(url, init);
+    };
+    responseOutput = scenario === 'unknown-model' ? { ...output, knowledge_level: 'insufficient' } : scenario === 'ambiguous-model' ? { ...output, identity_match: 'ambiguous' } : output;
+    try {
+      const calls = apiCalls;
+      const job = await service.createJob({ start: String(book.id), end: String(book.id) });
+      await worker.processNextItem(); await worker.processNextItem();
+      assert.equal(apiCalls, calls + 1, 'fallback uses one paid request, not a second call');
+      const input = JSON.parse(outbound.input); assert.equal(input.enrichment_basis, 'ai_model_knowledge'); assert.equal(input.public_description, null); assert.equal(input.book.isbn13, '9781398541474');
+      assert.match(outbound.instructions, /MODEL-KNOWLEDGE FALLBACK/); assert.match(outbound.instructions, /later paperback\/reprint date/);
+      const draft = (await service.readEnrichment(book.id, true)).revisions[0];
+      assert.equal(draft.sourceType, 'ai_model_knowledge'); assert.match(draft.sourceLabel, /no matched Open Library description/); assert.match(draft.limitations, /AI-generated/);
+      assert.equal(draft.olIdentityStatus, scenario === 'ambiguous-source' ? 'ambiguous' : scenario === 'no-description' ? 'verified' : 'unmatched');
+      assert.equal(draft.modelIdentityStatus, scenario === 'ambiguous-model' ? 'ambiguous' : 'confirmed');
+      assert.equal(draft.overview, ['unknown-model', 'ambiguous-model'].includes(scenario) ? null : output.overview);
+      assert.equal((await service.readEnrichment(book.id, false)).revisions.length, 0);
+      assert.equal((await db.enrichmentJobItem.findFirst({ where: { jobId: job.id } })).status, 'needs_review');
+      if (!['unknown-model', 'ambiguous-model'].includes(scenario)) {
+        await service.reviewEnrichment(book.id, { action: 'publish', revisionId: draft.id, identityConfirmed: true, overview: draft.overview, centralIdea: draft.centralIdea || '', concepts: draft.concepts.map(c => ({ id: c.id, name: c.proposedName, weight: c.weight, perspective: c.perspective || '', suppressed: false })) });
+        const published = (await service.readEnrichment(book.id, false)).revisions[0]; assert.match(published.sourceLabel, /model knowledge/); assert.equal(published.olIdentityStatus, draft.olIdentityStatus); assert.equal(published.identityStatus, 'owner_confirmed');
+        const row = await db.book.findUnique({ where: { id: book.id }, include: { enrichment: { include: { publishedRevision: { include: { concepts: { include: { concept: true } } } } } } } });
+        const fields = enrichmentBookFields(row); assert.equal(fields['Enrichment Source'], 'ai_model_knowledge'); assert.match(fields['AI Provenance'], /no matched Open Library description/);
+      }
+    } finally { global.fetch = fakeFetch; responseOutput = output; }
+  }
+});
+
+test('legacy provenance labels are inferred without treating model identity as external verification', () => {
+  assert.equal(enrichmentSourceType({ sourceType: 'legacy', olDescription: null }), 'ai_model_knowledge');
+  assert.equal(enrichmentSourceType({ sourceType: 'legacy', olDescription: 'Public description' }), 'open_library_description');
+  assert.match(enrichmentSourceLabel({ olDescription: null }), /no matched Open Library description/);
 });
 
 test('rate limits retry with persisted attempts and conservative reservations, then respect budget', async () => {
@@ -149,6 +205,9 @@ test('SQLite snapshot and staged restore retain enrichment and pause restored wo
   const restored = new PrismaClient({ datasources: { db: { url: `file:${backup.replace(/\\/g, '/')}` } } });
   try {
     assert.equal(await restored.bookEnrichmentRevision.count(), await db.bookEnrichmentRevision.count());
+    const original = await db.bookEnrichmentRevision.findFirst({ where: { sourceType: 'ai_model_knowledge' } });
+    const copy = await restored.bookEnrichmentRevision.findUnique({ where: { id: original.id } });
+    assert.equal(copy.sourceType, original.sourceType); assert.equal(copy.olIdentityStatus, original.olIdentityStatus); assert.equal(copy.modelIdentityStatus, original.modelIdentityStatus);
     assert.equal(await restored.concept.count(), await db.concept.count());
     assert.equal((await restored.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'paused');
     assert.equal((await restored.enrichmentJob.findUnique({ where: { id: job.id } })).accountedUsd, .02);
@@ -170,6 +229,18 @@ test('backups from before enrichment are upgraded in staging without losing book
   await upgradeStagedBackup(legacyFile);
   const upgraded = new PrismaClient({ datasources: { db: { url: `file:${legacyFile.replace(/\\/g, '/')}` } } });
   try { assert.equal(await upgraded.book.count(), 1); assert.equal(await upgraded.bookEnrichmentRevision.count(), 0); } finally { await upgraded.$disconnect(); }
+});
+
+test('backups with enrichment but without the new provenance columns upgrade without losing revisions', async () => {
+  const backup = path.join(temp, 'pre-provenance.db'); await db.$executeRawUnsafe(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+  const old = new PrismaClient({ datasources: { db: { url: 'file:' + backup.replace(/\\/g, '/') } } });
+  const count = await db.bookEnrichmentRevision.count();
+  try {
+    for (const field of ['sourceType', 'modelIdentityStatus', 'olIdentityStatus']) await old.$executeRawUnsafe(`ALTER TABLE BookEnrichmentRevision DROP COLUMN ${field}`);
+  } finally { await old.$disconnect(); }
+  await upgradeStagedBackup(backup);
+  const upgraded = new PrismaClient({ datasources: { db: { url: 'file:' + backup.replace(/\\/g, '/') } } });
+  try { assert.equal(await upgraded.bookEnrichmentRevision.count(), count); assert.equal((await upgraded.bookEnrichmentRevision.findFirst()).sourceType, 'legacy'); } finally { await upgraded.$disconnect(); }
 });
 
 test('a restarted worker pauses interrupted jobs without issuing another paid request', async () => {

@@ -1,5 +1,6 @@
 import { fingerprint, type IdentityBook } from "./core";
-type Published = { inputFingerprint: string; overview: string | null; centralIdea: string | null; olDescription: string | null; olSourceUrl: string | null; olWorkId: string | null; olEditionId: string | null; model: string; knowledgeLevel: string; createdAt: Date; concepts: { reviewStatus: string; concept: { name: string } | null }[] };
+import { enrichmentSourceLabel, enrichmentSourceType } from "./provenance";
+type Published = { sourceType?: string | null; inputFingerprint: string; overview: string | null; centralIdea: string | null; olDescription: string | null; olSourceUrl: string | null; olWorkId: string | null; olEditionId: string | null; model: string; knowledgeLevel: string; createdAt: Date; concepts: { reviewStatus: string; concept: { name: string } | null }[] };
 export function enrichmentBookFields(book: IdentityBook & { enrichment: { publishedRevision: Published | null } | null }) {
   const candidate = book.enrichment?.publishedRevision;
   const r = candidate?.inputFingerprint === fingerprint(book) ? candidate : null;
@@ -8,6 +9,7 @@ export function enrichmentBookFields(book: IdentityBook & { enrichment: { publis
     "Open Library Source": r?.olSourceUrl ?? null, "Open Library Work ID": r?.olWorkId ?? null, "Open Library Edition ID": r?.olEditionId ?? null,
     "Enrichment Status": r ? "published" : candidate ? "stale" : "unpublished", "Enrichment Model": r?.model ?? null,
     "Enrichment Knowledge": r?.knowledgeLevel ?? null, "Enriched At": r?.createdAt.toISOString() ?? null,
+    "Enrichment Source": r ? enrichmentSourceType(r) : null, "AI Provenance": r ? enrichmentSourceLabel(r) : null,
     "Concepts": r?.concepts.filter(c => c.reviewStatus === "approved").map(c => c.concept?.name).filter(Boolean).sort().join(", ") || null,
   };
 }

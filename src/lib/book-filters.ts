@@ -1,9 +1,10 @@
 import { bookNumber, type Book } from "./books";
 
-type Filters = { bookType?: string; category?: string; owner?: string; format: string; location: string; rating: string; author: string; language: string };
+type Filters = { enrichment?: string; bookType?: string; category?: string; owner?: string; format: string; location: string; rating: string; author: string; language: string };
 export function filterBooks(books: Book[], query: string, filters: Filters, sort: string, direction: string) {
   const q = query.trim().toLocaleLowerCase();
   const result = books.filter((b) => {
+    if (filters.enrichment && b.enrichmentStatus !== filters.enrichment) return false;
     if (q && ![bookNumber(b.id), b.title, b.authors, b.isbn10, b.isbn13, b.tags, b.owner?.name, b.publisher, b.shelfLocation, b.bookType, ...(b.categories || []).map((c) => c.name)].some((v) => v?.toLocaleLowerCase().includes(q))) return false;
     if (filters.owner === "__none" ? b.ownerId != null : filters.owner && String(b.ownerId) !== filters.owner) return false;
     if (filters.bookType === "__none" ? Boolean(b.bookType) : filters.bookType && b.bookType !== filters.bookType) return false;

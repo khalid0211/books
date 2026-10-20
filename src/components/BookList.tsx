@@ -6,10 +6,11 @@ import type { Book } from "@/lib/books";
 import { pubYear, bookNumber } from "@/lib/books";
 import { filterBooks } from "@/lib/book-filters";
 import Stars from "@/components/Stars";
+import { catalogueSearch, EMPTY_CATALOGUE_FILTERS, ENRICHMENT_LABELS, readCatalogueState } from "@/lib/catalogue-state";
 
-const EMPTY_FILTERS = { bookType: "", category: "", format: "", location: "", rating: "", author: "", language: "", owner: "" };
+const EMPTY_FILTERS = EMPTY_CATALOGUE_FILTERS;
 
-export default function BookList({ canEdit = false, canDelete = false }: { canEdit?: boolean; canDelete?: boolean }) {
+export default function BookList({ canEdit = false, canDelete = false, storageKey = "books-catalogue" }: { canEdit?: boolean; canDelete?: boolean; storageKey?: string }) {
   const [allBooks, setBooks] = useState<Book[]>([]);
   const [viewMode, setViewMode] = useState<"cards" | "table">("table");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
@@ -20,6 +21,23 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
   const [sort, setSort] = useState("createdAt");
   const [direction, setDirection] = useState("desc");
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [stateReady, setStateReady] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const catalogueQuery = catalogueSearch({ query, sort, direction, filters, viewMode, density, filtersOpen });
+  const catalogueHref = catalogueQuery ? `/?${catalogueQuery}` : "/";
+  const bookHref = (id: number) => `/books/${id}?returnTo=${encodeURIComponent(catalogueHref)}`;
+  useEffect(() => {
+    let saved: string | null = null;
+    try { saved = sessionStorage.getItem(storageKey); } catch { /* URL state still works if storage is blocked. */ }
+    const state = readCatalogueState(window.location.search, saved, canDelete);
+    setQuery(state.query); setSort(state.sort); setDirection(state.direction); setFilters(state.filters);
+    setViewMode(state.viewMode); setDensity(state.density); setFiltersOpen(state.filtersOpen); setStateReady(true);
+  }, [storageKey, canDelete]);
+  useEffect(() => {
+    if (!stateReady) return;
+    try { sessionStorage.setItem(storageKey, catalogueQuery); } catch {}
+    if (window.location.pathname === "/" && window.location.search !== (catalogueQuery ? `?${catalogueQuery}` : "")) window.history.replaceState(window.history.state, "", catalogueHref);
+  }, [stateReady, catalogueQuery, catalogueHref, storageKey]);
   const ownerChoices = [...new Map(allBooks.flatMap((book) => book.owner ? [[book.owner.id, book.owner] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name));
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const books = useMemo(() => filterBooks(allBooks, query, filters, sort, direction), [allBooks, query, filters, sort, direction]);
@@ -32,7 +50,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
   const selectedIds = [...selected].sort((a, b) => a - b);
 
-  function reset() { setQuery(""); setFilters(EMPTY_FILTERS); setSort("createdAt"); setDirection("desc"); }
+  function reset() { setQuery(""); setFilters(EMPTY_FILTERS); setSort("createdAt"); setDirection("desc"); setFiltersOpen(false); }
   function showSummary(kind: "all" | "classification" | "location" | "owner" | "recent") {
     setQuery(""); setFilters(EMPTY_FILTERS);
     if (kind === "classification") setFilters({ ...EMPTY_FILTERS, bookType: "__none", category: "__none" });
@@ -62,7 +80,7 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); window.addEventListener("focus", load); window.addEventListener("pageshow", load); return () => { window.removeEventListener("focus", load); window.removeEventListener("pageshow", load); }; }, [load]);
 
   async function onDelete(id: number, title: string) {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
@@ -109,7 +127,8 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
         <label className="text-sm">Sort by<select value={sort} onChange={(event) => setSort(event.target.value)} className={selectClass}><option value="createdAt">Date added</option><option value="id">Book number</option><option value="title">Title</option><option value="authors">Author</option><option value="publicationDate">Publication year</option><option value="rating">Rating</option><option value="shelfLocation">Shelf location</option></select></label>
         <label className="text-sm">Order<select value={direction} onChange={(event) => setDirection(event.target.value)} className={selectClass}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
       </div>
-      <details className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      {canDelete && <label className="block max-w-sm text-sm font-medium">Enrichment status<select value={filters.enrichment} onChange={event => setFilters(current => ({ ...current, enrichment: event.target.value }))} className={selectClass}><option value="">All books</option>{Object.entries(ENRICHMENT_LABELS).map(([key, label]) => <option key={key} value={key}>{label} ({allBooks.filter(book => book.enrichmentStatus === key).length})</option>)}</select></label>}
+      <details open={filtersOpen} onToggle={event => setFiltersOpen(event.currentTarget.open)} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
         <summary className="cursor-pointer text-sm font-medium">Filters{activeFilters ? ` (${activeFilters} active)` : ""}</summary>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {([['format', 'Format', 'format'], ['location', 'Shelf location', 'shelfLocation'], ['author', 'Author(s)', 'authors'], ['language', 'Language', 'language']] as const).map(([key, label, field]) => <label key={key} className="text-sm">{label}<select value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} className={selectClass}><option value="">All</option>{key === "location" && <option value="__none">Unassigned</option>}{choices(field).map((value) => <option key={value}>{value}</option>)}</select></label>)}
@@ -146,20 +165,24 @@ export default function BookList({ canEdit = false, canDelete = false }: { canEd
             <td><input type="checkbox" aria-label={`Select ${bookNumber(book.id)} ${book.title}`} checked={selected.has(book.id)} onChange={() => toggle(book.id)} /></td>
             <td><div className="relative flex h-14 w-10 items-center justify-center overflow-hidden rounded bg-slate-200 text-xs font-semibold text-slate-500 dark:bg-slate-700">{book.title.slice(0, 1).toUpperCase()}{book.coverImageUrl && <img src={book.coverImageUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</div></td>
             <td className="whitespace-nowrap font-mono text-xs text-slate-500">{bookNumber(book.id)}</td>
-            <td><Link href={`/books/${book.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline dark:text-slate-100 dark:hover:text-teal-300">{book.title}</Link><p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ") || "Unclassified"}</p>{book.format && <p className="mt-1 text-xs capitalize text-slate-500">{book.format}</p>}</td>
+            <td><EnrichmentBadge book={book} owner={canDelete} /><br/><Link href={bookHref(book.id)} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline dark:text-slate-100 dark:hover:text-teal-300">{book.title}</Link><p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ") || "Unclassified"}</p>{book.format && <p className="mt-1 text-xs capitalize text-slate-500">{book.format}</p>}</td>
             <td className="text-slate-600 dark:text-slate-300">{book.authors || "—"}</td><td>{book.owner?.name || <span className="text-slate-500">Unassigned</span>}</td>
             <td><span className="inline-block whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{book.shelfLocation || "Unassigned"}</span></td>
             <td className="text-slate-600 dark:text-slate-300">{pubYear(book) || "—"}</td><td className="whitespace-nowrap"><Stars value={book.rating} /></td>
-            <td><div className="flex justify-end gap-1"><Link href={`/books/${book.id}/label`} className="rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700">Label</Link><Link href={`/books/${book.id}`} className="rounded-md px-2 py-1.5 font-medium text-teal-700 hover:bg-teal-100 dark:text-teal-300 dark:hover:bg-teal-950">{canEdit ? "Edit" : "View"}</Link>{canDelete && <button onClick={() => onDelete(book.id, book.title)} className="rounded-md px-2 py-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-950">Delete</button>}</div></td>
+            <td><div className="flex justify-end gap-1"><Link href={`/books/${book.id}/label`} className="rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700">Label</Link><Link href={bookHref(book.id)} className="rounded-md px-2 py-1.5 font-medium text-teal-700 hover:bg-teal-100 dark:text-teal-300 dark:hover:bg-teal-950">{canEdit ? "Edit" : "View"}</Link>{canDelete && <button onClick={() => onDelete(book.id, book.title)} className="rounded-md px-2 py-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-950">Delete</button>}</div></td>
           </tr>)}</tbody>
         </table>
       </div>}
 
-      {viewMode === "cards" && <ul className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-3">{books.map((book) => <li key={book.id}><Link href={`/books/${book.id}`} className="flex h-full gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-500 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"><div className="relative flex h-24 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-200 text-lg font-semibold text-slate-500 dark:bg-slate-700">{book.title.slice(0, 1).toUpperCase()}{book.coverImageUrl && <img src={book.coverImageUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}</div><div className="min-w-0"><p className="font-mono text-xs text-slate-500">{bookNumber(book.id)}</p><h2 className="mt-1 font-semibold">{book.title}</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{book.authors || "Unknown author"}</p><p className="mt-2 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ") || "Unclassified"}</p></div></Link></li>)}</ul>}
+      {viewMode === "cards" && <ul className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-3">{books.map((book) => <li key={book.id}><Link href={bookHref(book.id)} className="flex h-full gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-500 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"><div className="relative flex h-24 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-200 text-lg font-semibold text-slate-500 dark:bg-slate-700">{book.title.slice(0, 1).toUpperCase()}{book.coverImageUrl && <img src={book.coverImageUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />}</div><div className="min-w-0"><p className="font-mono text-xs text-slate-500">{bookNumber(book.id)}</p><EnrichmentBadge book={book} owner={canDelete} /><h2 className="mt-1 font-semibold">{book.title}</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{book.authors || "Unknown author"}</p><p className="mt-2 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ") || "Unclassified"}</p></div></Link></li>)}</ul>}
 
-      <ul className="space-y-2 md:hidden">{books.map((book) => <li key={book.id}><Link href={`/books/${book.id}`} className="block w-full rounded-xl border border-slate-200 bg-white p-4 text-left active:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:active:bg-slate-700"><div className="mb-1 font-mono text-xs text-slate-500">{bookNumber(book.id)}</div><div className="font-semibold">{book.title}</div><p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ")}</p><div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{book.authors || "Unknown author"}</div><div className="mt-1 text-sm text-slate-500">Owner: {book.owner?.name || "Unassigned"}</div><div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">{pubYear(book) && <span>{pubYear(book)}</span>}{book.format && <span className="capitalize">· {book.format}</span>}{book.rating ? <span className="ml-auto"><Stars value={book.rating} /></span> : null}</div></Link></li>)}</ul>
+      <ul className="space-y-2 md:hidden">{books.map((book) => <li key={book.id}><Link href={bookHref(book.id)} className="block w-full rounded-xl border border-slate-200 bg-white p-4 text-left active:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:active:bg-slate-700"><div className="mb-1 font-mono text-xs text-slate-500">{bookNumber(book.id)}</div><EnrichmentBadge book={book} owner={canDelete} /><div className="font-semibold">{book.title}</div><p className="mt-1 text-xs text-teal-700 dark:text-teal-300">{[book.bookType, ...(book.categories || []).map((category) => category.name)].filter(Boolean).join(" · ")}</p><div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{book.authors || "Unknown author"}</div><div className="mt-1 text-sm text-slate-500">Owner: {book.owner?.name || "Unassigned"}</div><div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">{pubYear(book) && <span>{pubYear(book)}</span>}{book.format && <span className="capitalize">· {book.format}</span>}{book.rating ? <span className="ml-auto"><Stars value={book.rating} /></span> : null}</div></Link></li>)}</ul>
     </>}
 
     {canEdit && <Link href="/books/new" aria-label="Add book" className="safe-bottom fixed bottom-0 right-4 z-20 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal-700 text-3xl leading-none text-white shadow-lg md:hidden dark:bg-teal-300 dark:text-slate-950">+</Link>}
   </div>;
+}
+
+function EnrichmentBadge({ book, owner }: { book: Book; owner: boolean }) {
+  return owner && book.enrichmentStatus ? <span className="mt-1 inline-block rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">{ENRICHMENT_LABELS[book.enrichmentStatus]}</span> : null;
 }

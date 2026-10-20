@@ -31,6 +31,24 @@ not sent. Catalogue fields are never automatically replaced by enrichment.
 Identity ambiguity and missing descriptions remain explicit; model claims do not
 independently establish the identity of a book.
 
+When no matched Open Library description is available (missing book, ambiguous
+match, or a verified work without a description), the same OpenAI request uses an
+explicit model-knowledge fallback. The model is asked to recognize the work by
+title and author without needing to recognize a later edition's ISBN. A missing
+Open Library result is not treated as proof the model cannot know the book.
+Uncertain identity or insufficient knowledge still produces no publishable
+overview. Open Library outages remain retryable errors, not "book not found".
+
+Model-only results show **AI-generated — based on model knowledge; no matched
+Open Library description available.** The source type, original Open Library
+identity result and separate model identity assessment are stored on each new
+revision. Owner approval never turns a model claim into an externally verified
+Open Library match. Older revisions infer the source label from their saved
+description. Labels are shown to readers after publication too. This does not
+perform web search or guarantee that any particular title will be recognized.
+Previously empty results are not rerun automatically: select that book's range
+with **Regenerate existing drafts**, unlocking first if it is locked.
+
 The worker runs inside the single long-lived Next.js server; do not use a
 scale-to-zero/serverless host for background runs. SQLite stores jobs, attempts,
 errors and progress; a lease prevents concurrent workers. Runs interrupted by a
@@ -56,6 +74,18 @@ revision and approved concepts. Changing identity metadata makes the old enrichm
 stale and hides it from other users until regenerated. Concept importance and
 perspectives are stored now; related-book scoring is deferred.
 
+The Owner's catalogue has an **Enrichment status** filter, including **Needs
+approval**, Published, Insufficient information, Book changed and Not enriched.
+Status refers to the latest revision: a new draft needs approval even while an
+older approved revision remains visible to readers. Insufficient results are kept
+separate because they cannot be published without a new enrichment attempt.
+Search, filters, sort order and view settings are retained in the catalogue URL
+and per-user browser-tab storage. Book links carry a return address, including
+the back link after enrichment review and the destination after saving a book.
+Returning reloads catalogue status so newly approved books leave the approval
+filter. Reset clears the search/filter/sort settings explicitly. No new database
+fields or Airtable changes are needed for these catalogue controls.
+
 SQLite backups include settings (encrypted key only), drafts, published revisions,
 concepts and jobs. Restore validates and upgrades supported pre-enrichment backups
 in a temporary database before replacement, waits for enrichment to stop, retains
@@ -73,6 +103,9 @@ other fields (dates are ISO strings):
 `AI Overview`, `Central Idea`, `Open Library Description`, `Open Library Source`,
 `Open Library Work ID`, `Open Library Edition ID`, `Enrichment Status`,
 `Enrichment Model`, `Enrichment Knowledge`, `Enriched At`, `Concepts`.
+Also add `Enrichment Source` and `AI Provenance` as text/long-text fields. These
+preserve the AI-only or Open-Library-assisted source label when exporting approved
+information; both clear when the enrichment is unpublished or stale.
 
 Also create these two tables; all fields can be text, with long text for Perspective:
 

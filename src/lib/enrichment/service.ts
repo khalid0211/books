@@ -2,6 +2,7 @@ import { prisma } from "../prisma";
 import { parseBookId } from "../book-id";
 import { conceptKey, decryptKey, encryptKey, EnrichmentError, fingerprint, secretKey } from "./core";
 import { requestBody, reserveFor } from "./clients";
+import { enrichmentSourceLabel, enrichmentSourceType } from "./provenance";
 
 export async function settingsPublic() {
   const s = await prisma.enrichmentSettings.findUnique({ where: { id: 1 } });
@@ -68,7 +69,7 @@ export async function controlJob(id: number, action: unknown) {
 export async function readEnrichment(bookId: number, owner: boolean) {
   const row = await prisma.bookEnrichment.findUnique({ where: { bookId }, include: { book: true, revisions: { orderBy: { id: "desc" }, include: { concepts: { include: { concept: true }, ...(owner ? {} : { where: { reviewStatus: "approved" } }) } }, take: owner ? 20 : 1, ...(owner ? {} : { where: { publishedFor: { bookId } } }) } } });
   if (!row) return { manuallyLocked: false, publishedRevisionId: null, revisions: [] };
-  const revisions = row.revisions.filter(r => owner || r.inputFingerprint === fingerprint(row.book)).map(({ inputSnapshot, sourceSnapshot, generatedOutput, ...r }) => ({ ...r, stale: r.inputFingerprint !== fingerprint(row.book) }));
+  const revisions = row.revisions.filter(r => owner || r.inputFingerprint === fingerprint(row.book)).map(({ inputSnapshot, sourceSnapshot, generatedOutput, ...r }) => ({ ...r, sourceType: enrichmentSourceType(r), sourceLabel: enrichmentSourceLabel(r), stale: r.inputFingerprint !== fingerprint(row.book) }));
   return { manuallyLocked: row.manuallyLocked, publishedRevisionId: row.publishedRevisionId, revisions };
 }
 export async function reviewEnrichment(bookId: number, body: Record<string, any>) {

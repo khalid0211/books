@@ -35,6 +35,7 @@ export type BookInput = {
 };
 
 export type Book = BookInput & {
+  enrichmentStatus?: import("./catalogue-state").EnrichmentStatus;
   bookType?: string | null;
   categories?: { id: number; name: string }[];
   owner?: { id: number; name: string } | null;

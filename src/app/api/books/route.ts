@@ -1,8 +1,9 @@
 import { classificationInput } from "@/lib/classification-input";
-import { authorize, READ, WRITE, OWNER } from "@/lib/auth";
+import { authorize, currentUser, READ, WRITE, OWNER } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseBookInput, ValidationError } from "@/lib/books";
+import { catalogueEnrichmentStatus } from "@/lib/enrichment/catalogue-status";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,11 @@ export async function GET(req: Request) {
     : undefined;
 
   const books = await prisma.book.findMany({ where, orderBy, include: { categories: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } } });
+  if ((await currentUser())?.role === "OWNER") {
+    const enrichment = await prisma.bookEnrichment.findMany({ where: { bookId: { in: books.map(b => b.id) } }, select: { bookId: true, publishedRevisionId: true, revisions: { orderBy: { id: "desc" }, take: 1, select: { id: true, inputFingerprint: true, knowledgeLevel: true, overview: true, reviewStatus: true } } } });
+    const byBook = new Map(enrichment.map(e => [e.bookId, e]));
+    return NextResponse.json(books.map(b => ({ ...b, enrichmentStatus: catalogueEnrichmentStatus(b, byBook.get(b.id)) })));
+  }
   return NextResponse.json(books);
 }
 

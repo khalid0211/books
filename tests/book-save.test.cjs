@@ -13,7 +13,8 @@ function load(path, dependencies) {
 }
 
 for (const success of [true, false]) {
-  test(`edit save ${success ? 'returns to the catalog' : 'stays on the form after a server error'}`, async () => {
+ for (const returnTo of [undefined, '/?enrichment=needs_review&sort=id&dir=asc']) {
+  test(`edit save ${success ? 'returns to the catalog' : 'stays on the form after a server error'} ${returnTo ? 'with retained filters' : 'with defaults'}`, async () => {
     const state = [];
     const transitions = [];
     const navigation = [];
@@ -35,7 +36,7 @@ for (const success of [true, false]) {
       if (name === 'fetch') return async () => ({ ok: success, status: 500, json: async () => success ? {} : { error: 'Save failed' } });
       return { default: () => null };
     }).default;
-    const tree = Form({ initial: { ...books.emptyBookInput(), id: 16, title: 'Example' } });
+    const tree = Form({ initial: { ...books.emptyBookInput(), id: 16, title: 'Example' }, returnTo });
     function findForm(node) {
       if (!node || typeof node !== 'object') return;
       if (node.type === 'form') return node;
@@ -49,6 +50,7 @@ for (const success of [true, false]) {
     assert.ok(saving, 'Submitting should set saving state');
     assert.equal(state[saving.index], false, 'Saving state must reset even when navigation keeps the form mounted');
     assert.ok(state.includes(success ? 'Changes saved.' : 'Save failed'));
-    assert.deepEqual(navigation, success ? ['/'] : []);
+    assert.deepEqual(navigation, success ? [returnTo || '/'] : []);
   });
+ }
 }

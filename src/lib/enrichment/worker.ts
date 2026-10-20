@@ -4,6 +4,7 @@ import { databaseRestoreRunning } from "../database-file";
 import { bookInput, conceptKey, EnrichmentError, fingerprint, PROMPT_VERSION, safeError, tokenCost } from "./core";
 import { callOpenAI, requestBody, reserveFor, retrieveSource } from "./clients";
 import { usableSettings } from "./service";
+import { enrichmentSourceLabel, enrichmentSourceType } from "./provenance";
 
 const globalWorker = globalThis as typeof globalThis & { catalogueEnrichmentWorker?: { token: string; started: boolean; busy: boolean; recovered: boolean; warned: boolean } };
 const state = globalWorker.catalogueEnrichmentWorker ??= { token: randomUUID(), started: false, busy: false, recovered: false, warned: false };
@@ -51,6 +52,7 @@ export async function processNextItem() {
       }
       await tx.bookEnrichment.upsert({ where: { bookId: book.id }, create: { bookId: book.id }, update: {} });
       const output = result.output!;
+      const provenance = { olDescription: source.description };
       const concepts = [];
       for (const concept of output.concepts) {
         const nameKey = conceptKey(concept.name);
@@ -60,8 +62,8 @@ export async function processNextItem() {
       }
       await tx.bookEnrichmentRevision.create({ data: { bookId: book.id, inputFingerprint, inputSnapshot: JSON.stringify(bookInput(book)), generatedOutput: JSON.stringify(output), sourceSnapshot: source.snapshot,
         olWorkId: source.workId, olEditionId: source.editionId, olDescription: source.description, olSourceUrl: source.sourceUrl,
-        identityStatus: source.identityStatus, knowledgeLevel: output.knowledge_level, overview: output.overview, centralIdea: output.central_idea,
-        limitations: output.limitations, model: job.model, promptVersion: PROMPT_VERSION, inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedCostUsd: cost, concepts: { create: concepts } } });
+        identityStatus: source.identityStatus, olIdentityStatus: source.identityStatus, modelIdentityStatus: output.identity_match, sourceType: enrichmentSourceType(provenance), knowledgeLevel: output.knowledge_level, overview: output.overview, centralIdea: output.central_idea,
+        limitations: `${enrichmentSourceLabel(provenance)} ${output.limitations}`, model: job.model, promptVersion: PROMPT_VERSION, inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedCostUsd: cost, concepts: { create: concepts } } });
       await tx.enrichmentJobItem.update({ where: { id: item.id }, data: { status: "needs_review", error: null } });
     });
   } catch (error) {
