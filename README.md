@@ -64,19 +64,26 @@ account billing limit. A budget-exhausted run stays paused; create a smaller new
 run or adjust settings for a new run. Already processed drafts are skipped unless
 regeneration is selected, and locked books are always skipped.
 
-Each generated result is a draft revision. Open the book form to inspect the
-Open Library description, AI overview, central idea/theme and concepts. The Owner
-can correct text, map concept names to canonical names, remember aliases, suppress
-concepts, and confirm identity before publishing. Publishing locks regeneration;
-unlock explicitly to obtain a new draft. Existing published information stays
-available while a new draft is reviewed. Other users see only the current published
-revision and approved concepts. Changing identity metadata makes the old enrichment
-stale and hides it from other users until regenerated. Concept importance and
-perspectives are stored now; related-book scoring is deferred.
+Sufficient enrichments are now approved and published automatically. This requires
+a nonempty overview, high/medium model knowledge, a confirmed intended work, and
+usable concepts. Missing Open Library descriptions do not prevent automatic
+approval when the model confidently identifies the work. Low/unknown knowledge,
+uncertain identity, stale metadata and insufficient results remain unpublished or
+retain the previous approved revision. Automatic approval is labelled separately
+from Owner review and never claims full-text verification.
+
+Existing drafts (including the first 50 enriched books) are checked in bounded
+background batches after deployment, without another OpenAI request. The Owner can
+also click **Approve sufficient existing enrichments** on Enrich books. Manual
+locks, corrected publications and deliberate unpublication are preserved. Open the
+book form to inspect or correct text, map canonical concepts, remember aliases or
+suppress concepts. Saving manual corrections locks regeneration. Unpublish also
+blocks later automatic publication until the Owner explicitly republishes.
+Changing identity metadata hides stale content from readers until regenerated.
 
 The Owner's catalogue has an **Enrichment status** filter, including **Needs
-approval**, Published, Insufficient information, Book changed and Not enriched.
-Status refers to the latest revision: a new draft needs approval even while an
+attention**, Approved / published, Insufficient information, Book changed and Not enriched.
+Status refers to the latest revision; a protected new draft may need attention while an
 older approved revision remains visible to readers. Insufficient results are kept
 separate because they cannot be published without a new enrichment attempt.
 Search, filters, sort order and view settings are retained in the catalogue URL
@@ -85,6 +92,29 @@ the back link after enrichment review and the destination after saving a book.
 Returning reloads catalogue status so newly approved books leave the approval
 filter. Reset clears the search/filter/sort settings explicitly. No new database
 fields or Airtable changes are needed for these catalogue controls.
+
+### Related books in your library
+
+Every signed-in user sees up to five related works on a book's page. Connections
+use approved canonical concepts on current published revisions. We rank them with
+IDF-weighted Jaccard similarity (minimum shared weight divided by maximum union
+weight), then explain the actual shared concepts. Saved perspectives can be
+expanded for comparison; the app does not infer agreement, contrast or influence.
+
+Two meaningful shared concepts are normally required. A single highly salient
+concept can qualify only when distinctive in a corpus of at least ten works.
+Generic tags such as leadership/history/technology cannot establish a connection
+alone; scores below 0.12 are omitted. Duplicate copies/editions are grouped by
+verified Open Library work, ISBN, or normalized title+author for corpus frequencies
+and recommendation diversity. Your own work/copies are excluded. Editorial aliases
+apply to existing and future assignments; no uncertain fuzzy concept merges occur.
+
+At this catalogue size, similarity is calculated on demand from SQLite, without
+additional AI calls or a graph database. Changes to publication, concepts, identity
+or restored data take effect on the next request; no cached stale edges need
+rebuilding. Airtable's existing Concepts and Book Concepts export includes the
+automatically approved assignments. Existing AI Provenance text records automatic
+versus Owner approval; no additional Airtable fields are needed for this milestone.
 
 SQLite backups include settings (encrypted key only), drafts, published revisions,
 concepts and jobs. Restore validates and upgrades supported pre-enrichment backups

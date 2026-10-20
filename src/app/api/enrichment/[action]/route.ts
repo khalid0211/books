@@ -2,6 +2,7 @@ import { authorize, OWNER } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { EnrichmentError, safeError } from "@/lib/enrichment/core";
 import { controlJob, createJob, previewRange, saveSettings, settingsPublic, usableSettings } from "@/lib/enrichment/service";
+import { approveExistingEnrichments } from "@/lib/enrichment/approval";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ action: string }> };
@@ -22,6 +23,7 @@ export async function POST(req: Request, { params }: Context) {
     if (action === "settings") return Response.json(await saveSettings(body), { headers });
     if (action === "preview") return Response.json(await previewRange(body), { headers });
     if (action === "jobs") return Response.json(await createJob(body), { status: 201, headers });
+    if (action === "approve-existing") return Response.json(await approveExistingEnrichments(100, true), { headers });
     if (action === "control") {
       if (!Number.isSafeInteger(body.id) || body.id < 1) throw new EnrichmentError("Invalid run ID.");
       return Response.json(await controlJob(body.id, body.action), { headers });

@@ -77,7 +77,7 @@ export async function reviewEnrichment(bookId: number, body: Record<string, any>
     const entry = await tx.bookEnrichment.findUnique({ where: { bookId }, include: { book: true } });
     if (!entry) throw new EnrichmentError("No enrichment found.");
     if (body.action === "lock") return tx.bookEnrichment.update({ where: { bookId }, data: { manuallyLocked: body.locked === true } });
-    if (body.action === "unpublish") return tx.bookEnrichment.update({ where: { bookId }, data: { publishedRevisionId: null } });
+    if (body.action === "unpublish") return tx.bookEnrichment.update({ where: { bookId }, data: { publishedRevisionId: null, autoApprovalBlocked: true } });
     const revision = await tx.bookEnrichmentRevision.findFirst({ where: { id: Number(body.revisionId), bookId }, include: { concepts: true } });
     if (!revision) throw new EnrichmentError("Revision not found.");
     if (revision.inputFingerprint !== fingerprint(entry.book)) throw new EnrichmentError("Book identity changed. Regenerate enrichment before publishing.");
@@ -108,7 +108,7 @@ export async function reviewEnrichment(bookId: number, body: Record<string, any>
       }
       await tx.bookConcept.update({ where: { id: original.id }, data: { conceptId, proposedName: edit.name.trim(), weight: edit.weight, perspective: edit.perspective.trim() || null, reviewStatus: edit.suppressed ? "suppressed" : "approved" } });
     }
-    await tx.bookEnrichmentRevision.update({ where: { id: revision.id }, data: { overview, centralIdea: centralIdea || null, reviewStatus: "approved", editedAt: new Date(), identityStatus: "owner_confirmed" } });
-    return tx.bookEnrichment.update({ where: { bookId }, data: { publishedRevisionId: revision.id, manuallyLocked: true } });
+    await tx.bookEnrichmentRevision.update({ where: { id: revision.id }, data: { overview, centralIdea: centralIdea || null, reviewStatus: "approved", approvalSource: "owner", approvedAt: new Date(), editedAt: new Date(), identityStatus: "owner_confirmed" } });
+    return tx.bookEnrichment.update({ where: { bookId }, data: { publishedRevisionId: revision.id, manuallyLocked: true, autoApprovalBlocked: false } });
   });
 }

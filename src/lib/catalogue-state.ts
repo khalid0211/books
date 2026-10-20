@@ -1,5 +1,5 @@
 export const EMPTY_CATALOGUE_FILTERS = { bookType: "", category: "", format: "", location: "", rating: "", author: "", language: "", owner: "", enrichment: "" };
-export const ENRICHMENT_LABELS = { needs_review: "Needs approval", published: "Published", insufficient: "Insufficient information", stale: "Book changed · regenerate", not_enriched: "Not enriched" };
+export const ENRICHMENT_LABELS = { needs_review: "Needs attention", published: "Approved / published", insufficient: "Insufficient information", stale: "Book changed · regenerate", not_enriched: "Not enriched" };
 export type EnrichmentStatus = keyof typeof ENRICHMENT_LABELS;
 export type CatalogueState = { query: string; sort: string; direction: string; viewMode: "cards" | "table"; density: "compact" | "comfortable"; filters: typeof EMPTY_CATALOGUE_FILTERS; filtersOpen: boolean };
 export function defaultCatalogueState(): CatalogueState {

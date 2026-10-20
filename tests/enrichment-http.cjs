@@ -34,11 +34,13 @@ async function main() {
       return fetch(origin + url, { redirect: 'manual', method: body === undefined ? 'GET' : 'POST', headers: { ...(role ? { cookie: 'book_session=' + sessions[role] } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json', Origin: foreign ? 'http://other.invalid' : origin }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     }
     assert.equal((await request('/api/enrichment/settings')).status, 401);
+    assert.equal((await request(`/api/books/${book.id}/related`)).status, 401);
     for (const role of ['VIEW', 'LIBRARIAN']) {
       assert.equal((await request('/api/enrichment/settings', role)).status, 403);
       assert.equal((await request('/api/enrichment/preview', role, { start: 'B1', end: 'B10' })).status, 403);
       assert.equal((await request('/enrichment', role)).status, 307);
       assert.equal((await request(`/api/books/${book.id}/enrichment`, role, { action: 'lock', locked: true })).status, 403);
+      assert.equal((await request('/api/enrichment/approve-existing', role, {})).status, 403);
     }
     const input = { model: 'test-model', apiKey: 'test-key-12345678901234567890', inputRate: 1, outputRate: 4, budgetUsd: 1, maxBooks: 10 };
     assert.equal((await request('/api/enrichment/settings', 'OWNER', input, true)).status, 403);
@@ -58,23 +60,35 @@ async function main() {
     }
     assert(workerStarted, 'Next instrumentation must start the durable worker');
     const fingerprintInput = { title: book.title, authors: book.authors, isbn10: null, isbn13: null, publicationDate: null, edition: null, language: null };
-    const draft = await db.bookEnrichment.create({ data: { bookId: book.id, revisions: { create: { inputFingerprint: crypto.createHash('sha256').update(JSON.stringify(fingerprintInput)).digest('hex'), inputSnapshot: JSON.stringify(fingerprintInput), sourceSnapshot: '{}', identityStatus: 'verified', knowledgeLevel: 'high', overview: 'A draft overview for review.', limitations: 'AI-generated; not full-text verified.', model: 'test-model', promptVersion: 'test' } } }, include: { revisions: true } });
+    const topicNames = ['Intuition', 'Cognitive bias', 'Rapid cognition'];
+    const makeConcepts = () => ({ create: topicNames.map(name => ({ originalTerm: name, proposedName: name, weight: .9, perspective: `Explores ${name}.` })) });
+    const draft = await db.bookEnrichment.create({ data: { bookId: book.id, manuallyLocked: true, revisions: { create: { inputFingerprint: crypto.createHash('sha256').update(JSON.stringify(fingerprintInput)).digest('hex'), inputSnapshot: JSON.stringify(fingerprintInput), sourceSnapshot: '{}', identityStatus: 'verified', knowledgeLevel: 'high', overview: 'A draft overview for review.', limitations: 'AI-generated; not full-text verified.', model: 'test-model', promptVersion: 'test', concepts: makeConcepts() } } }, include: { revisions: { include: { concepts: true } } } });
     response = await request('/api/books', 'OWNER'); assert.equal((await response.json())[0].enrichmentStatus, 'needs_review');
     response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.deepEqual((await response.json()).revisions, []);
     const returnTo = '/?enrichment=needs_review&sort=id&dir=asc';
     response = await request(`/books/${book.id}?returnTo=${encodeURIComponent(returnTo)}`, 'OWNER'); assert((await response.text()).includes('href="/?enrichment=needs_review'));
-    response = await request(`/api/books/${book.id}/enrichment`, 'OWNER', { action: 'publish', revisionId: draft.revisions[0].id, identityConfirmed: true, overview: 'An approved overview.', centralIdea: '', concepts: [] }); assert.equal(response.status, 200);
+    response = await request(`/api/books/${book.id}/enrichment`, 'OWNER', { action: 'publish', revisionId: draft.revisions[0].id, identityConfirmed: true, overview: 'An approved overview.', centralIdea: '', concepts: draft.revisions[0].concepts.map(c => ({ id: c.id, name: c.proposedName, weight: c.weight, perspective: c.perspective, suppressed: false })) }); assert.equal(response.status, 200);
     response = await request('/api/books', 'OWNER'); assert.equal((await response.json())[0].enrichmentStatus, 'published');
     for (const url of ['/enrichment', `/books/${book.id}`, '/database']) { response = await request(url, 'OWNER'); assert.equal(response.status, 200); const text = await response.text(); assert(!text.includes(input.apiKey)); }
     response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.equal((await response.json()).revisions[0].overview, 'An approved overview.');
     response = await request(`/api/books/${book.id}/enrichment`, 'VIEW'); assert.match((await response.json()).revisions[0].sourceLabel, /no matched Open Library description/);
+    const second = await db.book.create({ data: { title: 'Another Work', authors: 'Another Author' } });
+    const secondInput = { ...fingerprintInput, title: second.title, authors: second.authors };
+    await db.bookEnrichment.create({ data: { bookId: second.id, revisions: { create: { inputFingerprint: crypto.createHash('sha256').update(JSON.stringify(secondInput)).digest('hex'), inputSnapshot: JSON.stringify(secondInput), sourceSnapshot: '{}', identityStatus: 'unmatched', modelIdentityStatus: 'confirmed', knowledgeLevel: 'high', overview: 'Another useful overview.', limitations: 'AI-generated.', model: 'test-model', promptVersion: 'test', concepts: makeConcepts() } } } });
+    response = await request('/api/enrichment/approve-existing', 'OWNER', {}); assert.equal(response.status, 200);
+    for (const role of ['OWNER', 'LIBRARIAN', 'VIEW']) { response = await request(`/api/books/${book.id}/related`, role); assert.equal(response.status, 200); const related = await response.json(); assert.equal(related.books[0].id, second.id); assert.equal(related.books[0].sharedConcepts.length, 3); }
+    assert.equal((await request(`/api/books/${book.id}/related?limit=99`, 'VIEW')).status, 400);
+    assert.equal((await request('/api/books/999999/related', 'VIEW')).status, 404);
     // Owner backup endpoint includes every new table; restore exercises staging, session preservation and paused jobs.
     response = await request('/api/database/backup', 'OWNER'); assert.equal(response.status, 200); const bytes = await response.arrayBuffer(); assert(Buffer.from(bytes).subarray(0, 16).toString().startsWith('SQLite format 3'));
     const form = new FormData(); form.set('confirmation', 'RESTORE'); form.set('backup', new Blob([bytes]), 'catalogue.db');
     await db.$disconnect(); // Windows cannot replace a SQLite file held open by this test process.
     response = await fetch(origin + '/api/database/restore', { method: 'POST', headers: { cookie: 'book_session=' + sessions.OWNER, Origin: origin }, body: form }); assert.equal(response.status, 200, await response.clone().text());
-    assert.equal((await db.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'paused'); assert.equal(await db.book.count(), 1);
-    console.log('Authenticated HTTP checks passed: Owner-only settings/runs, origin checks, range preview, book/settings pages, hidden keys, backup and restore.');
+    assert.equal((await db.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'paused'); assert.equal(await db.book.count(), 2);
+    response = await request(`/api/books/${book.id}/related`, 'VIEW'); assert.equal((await response.json()).books[0].id, second.id);
+    response = await request(`/api/books/${second.id}/enrichment`, 'OWNER', { action: 'unpublish' }); assert.equal(response.status, 200);
+    response = await request(`/api/books/${book.id}/related`, 'VIEW'); assert.deepEqual((await response.json()).books, []);
+    console.log('Authenticated HTTP checks passed: Owner-only controls, auto-approval, related books for all roles, publication invalidation, filtered navigation, backup and restore.');
   } finally {
     if (server && server.exitCode === null) { const exited = new Promise(r => server.once('exit', r)); server.kill(); await exited; }
     await db.$disconnect(); fs.rmSync(temp, { recursive: true, force: true });

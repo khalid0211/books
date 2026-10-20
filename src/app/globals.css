@@ -39,11 +39,12 @@ body { background: #f5f7f6; color: #13271f; -webkit-font-smoothing: antialiased;
   .catalog-table td:last-child a, .catalog-table td:last-child button { white-space: nowrap; text-decoration: none; }
   .desktop-book-form > header { padding-top: 1.25rem; padding-bottom: 1.25rem; }
   .desktop-book-form h1 { font-size: 1.75rem; letter-spacing: -.025em; }
-  .desktop-book-form > form { border: 1px solid #d6e1dc; border-radius: 1rem; background: white; padding: 1.75rem; gap: 1.5rem; box-shadow: 0 2px 8px #13271f0a; }
-  .desktop-book-form > div.mb-5 { padding: 1.5rem; border-radius: 1rem; }
+  .desktop-book-form .book-form-card { padding: 1.5rem; }
+  .desktop-book-form .book-form-header { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+
   @media (prefers-color-scheme: dark) {
     .app-content { background: linear-gradient(135deg, #13271f 0%, #172f25 100%); }
-    .desktop-book-form > form { background: #20382e; border-color: #30493e; }
+
   }
 }
 
@@ -53,3 +54,25 @@ body { background: #f5f7f6; color: #13271f; -webkit-font-smoothing: antialiased;
 }
 
 .safe-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+
+/* Cards share one visual rhythm without changing other application forms. */
+.book-form-card,
+.book-enrichment-layout > section {
+  min-width: 0;
+  border: 1px solid #d6e1dc;
+  border-radius: 1rem;
+  background: white;
+  padding: 1rem;
+  box-shadow: 0 2px 8px #13271f05;
+}
+.book-form-card > fieldset { border: 0; padding: 0; }
+.book-form-card input, .book-form-card select, .book-form-card textarea { min-width: 0; }
+.book-enrichment-layout > section + section { margin-top: 1.5rem; }
+@media (min-width: 1024px) {
+  .book-lookup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); column-gap: 2rem; align-items: center; }
+  .book-lookup > p, .book-lookup > [role="status"] { grid-column: 1 / -1; }
+  .book-enrichment-layout > section { padding: 1.5rem; }
+}
+@media (prefers-color-scheme: dark) {
+  .book-form-card, .book-enrichment-layout > section { background: #20382e; border-color: #30493e; }
+}

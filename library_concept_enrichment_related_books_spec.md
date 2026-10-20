@@ -1,5 +1,7 @@
 # Library Application — AI Concept Enrichment and Automated Related Books
 
+**Updated user policy (20 October 2026):** Sufficient, confidently identified high/medium-knowledge enrichments are approved automatically, including existing drafts without paid regeneration. Preserve manual locks, corrections and unpublication. Related books now use approved concepts in the current SQLite database, calculated on demand with explanations and duplicate-work filtering. The implementation details and validation are recorded in `SIMILAR_BOOKS_IMPLEMENTATION.md`; this policy supersedes the original manual-publication milestone below.
+
 **Status:** Implementation specification (MVP)  
 **Scope:** Existing catalogue (~700 books); retain current database and Open Library integration.  
 **Decision:** Use automated links derived from concepts. Do **not** require Apache AGE in the first release.

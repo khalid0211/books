@@ -5,6 +5,7 @@ import { bookInput, conceptKey, EnrichmentError, fingerprint, PROMPT_VERSION, sa
 import { callOpenAI, requestBody, reserveFor, retrieveSource } from "./clients";
 import { usableSettings } from "./service";
 import { enrichmentSourceLabel, enrichmentSourceType } from "./provenance";
+import { approveExistingEnrichments, autoApproveRevision } from "./approval";
 
 const globalWorker = globalThis as typeof globalThis & { catalogueEnrichmentWorker?: { token: string; started: boolean; busy: boolean; recovered: boolean; warned: boolean } };
 const state = globalWorker.catalogueEnrichmentWorker ??= { token: randomUUID(), started: false, busy: false, recovered: false, warned: false };
@@ -20,7 +21,7 @@ export async function processNextItem() {
   if (!job || databaseRestoreRunning()) return;
   const item = await prisma.enrichmentJobItem.findFirst({ where: { jobId: job.id, status: "queued", nextAttemptAt: { lte: new Date() } }, orderBy: { id: "asc" }, include: { book: { include: { enrichment: { include: { revisions: { take: 1, orderBy: { id: "desc" } } } } } } } });
   if (!item) {
-    if (!await prisma.enrichmentJobItem.count({ where: { jobId: job.id, status: { in: ["queued", "running"] } } })) await prisma.enrichmentJob.updateMany({ where: { id: job.id, status: { in: ["queued", "running"] } }, data: { status: "completed", message: "Run complete. Review draft results before publishing." } });
+    if (!await prisma.enrichmentJobItem.count({ where: { jobId: job.id, status: { in: ["queued", "running"] } } })) await prisma.enrichmentJob.updateMany({ where: { id: job.id, status: { in: ["queued", "running"] } }, data: { status: "completed", message: "Run complete. Sufficient enrichments were approved automatically; uncertain results need attention." } });
     return;
   }
   const inputFingerprint = fingerprint(item.book), latest = item.book.enrichment?.revisions[0];
@@ -60,11 +61,13 @@ export async function processNextItem() {
         const canonical = alias ? null : await tx.concept.findUnique({ where: { nameKey } });
         concepts.push({ originalTerm: concept.name, proposedName: concept.name, conceptId: alias?.conceptId ?? canonical?.id ?? null, weight: concept.salience, perspective: concept.perspective });
       }
-      await tx.bookEnrichmentRevision.create({ data: { bookId: book.id, inputFingerprint, inputSnapshot: JSON.stringify(bookInput(book)), generatedOutput: JSON.stringify(output), sourceSnapshot: source.snapshot,
+      const revision = await tx.bookEnrichmentRevision.create({ data: { bookId: book.id, inputFingerprint, inputSnapshot: JSON.stringify(bookInput(book)), generatedOutput: JSON.stringify(output), sourceSnapshot: source.snapshot,
         olWorkId: source.workId, olEditionId: source.editionId, olDescription: source.description, olSourceUrl: source.sourceUrl,
         identityStatus: source.identityStatus, olIdentityStatus: source.identityStatus, modelIdentityStatus: output.identity_match, sourceType: enrichmentSourceType(provenance), knowledgeLevel: output.knowledge_level, overview: output.overview, centralIdea: output.central_idea,
         limitations: `${enrichmentSourceLabel(provenance)} ${output.limitations}`, model: job.model, promptVersion: PROMPT_VERSION, inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedCostUsd: cost, concepts: { create: concepts } } });
-      await tx.enrichmentJobItem.update({ where: { id: item.id }, data: { status: "needs_review", error: null } });
+      await tx.enrichmentJobItem.update({ where: { id: item.id }, data: { revisionId: revision.id, status: "needs_review", error: null } });
+      const approval = await autoApproveRevision(tx, revision.id);
+      await tx.enrichmentJobItem.update({ where: { id: item.id }, data: { status: approval === "approved" ? "approved" : approval === "insufficient" ? "insufficient" : "needs_review" } });
     });
   } catch (error) {
     const retry = error instanceof EnrichmentError && error.retryable && item.attempts < 2;
@@ -85,6 +88,7 @@ export async function runEnrichmentTick() {
       await prisma.enrichmentJobItem.updateMany({ where: { status: "running" }, data: { status: "queued", error: "Interrupted before completion; review usage before resuming." } });
       state.recovered = true;
     }
+    await approveExistingEnrichments(10);
     await processNextItem();
     state.warned = false;
   } catch {

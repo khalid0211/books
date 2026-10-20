@@ -138,6 +138,7 @@ model BookEnrichment {
   bookId Int @id
   book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
   manuallyLocked Boolean @default(false)
+  autoApprovalBlocked Boolean @default(false)
   publishedRevisionId Int? @unique
   publishedRevision BookEnrichmentRevision? @relation("PublishedRevision", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
   revisions BookEnrichmentRevision[] @relation("EnrichmentRevisions")
@@ -165,6 +166,10 @@ model BookEnrichmentRevision {
   centralIdea String?
   limitations String
   reviewStatus String @default("needs_review")
+  approvalSource String?
+  approvedAt DateTime?
+  autoApprovalCheckedAt DateTime?
+  approvalNote String?
   model String
   promptVersion String
   inputTokens Int @default(0)
@@ -173,6 +178,7 @@ model BookEnrichmentRevision {
   createdAt DateTime @default(now())
   editedAt DateTime?
   concepts BookConcept[]
+  jobItems EnrichmentJobItem[]
   @@index([bookId, createdAt])
 }
 
@@ -230,6 +236,8 @@ model EnrichmentJobItem {
   job EnrichmentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   bookId Int
   book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  revisionId Int?
+  revision BookEnrichmentRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
   status String @default("queued")
   attempts Int @default(0)
   error String?

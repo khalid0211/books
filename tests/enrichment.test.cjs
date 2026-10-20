@@ -96,10 +96,11 @@ test('catalogue range, draft generation, owner correction, publication, locking 
   await assert.rejects(service.createJob({ start: `B${a.id}`, end: `B${b.id}` }), /current run/);
   await worker.processNextItem(); await worker.processNextItem(); await worker.processNextItem();
   assert.equal((await db.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'completed');
-  assert.equal((await service.readEnrichment(a.id, false)).revisions.length, 0);
+  assert.equal((await service.readEnrichment(a.id, false)).revisions.length, 1);
   const draft = (await service.readEnrichment(a.id, true)).revisions[0]; assert.equal(draft.identityStatus, 'verified');
   assert.equal(draft.olDescription, 'A public catalogue description.'); assert.equal(draft.concepts.length, 3);
   assert.equal(draft.sourceType, 'open_library_description'); assert.equal(draft.modelIdentityStatus, 'confirmed'); assert.equal(draft.olIdentityStatus, 'verified');
+  assert.equal(draft.approvalSource, 'automatic'); assert.equal(draft.reviewStatus, 'approved');
   const edit = { action: 'publish', revisionId: draft.id, identityConfirmed: true, overview: 'Owner-corrected overview.', centralIdea: 'Corrected central idea.', concepts: draft.concepts.map((c, i) => ({ id: c.id, name: i === 0 ? 'Intuitive judgement' : c.proposedName, weight: c.weight, perspective: c.perspective || '', suppressed: i === 2, saveAlias: i === 0 })) };
   await assert.rejects(service.reviewEnrichment(a.id, { ...edit, identityConfirmed: false }), /Confirm/);
   await assert.rejects(service.reviewEnrichment(a.id, { ...edit, concepts: edit.concepts.map((c, i) => i === 1 ? { ...c, name: edit.concepts[0].name } : c) }), /same canonical concept/);
@@ -143,8 +144,9 @@ test('model-only fallback retains confident output without a source description,
       assert.equal(draft.olIdentityStatus, scenario === 'ambiguous-source' ? 'ambiguous' : scenario === 'no-description' ? 'verified' : 'unmatched');
       assert.equal(draft.modelIdentityStatus, scenario === 'ambiguous-model' ? 'ambiguous' : 'confirmed');
       assert.equal(draft.overview, ['unknown-model', 'ambiguous-model'].includes(scenario) ? null : output.overview);
-      assert.equal((await service.readEnrichment(book.id, false)).revisions.length, 0);
-      assert.equal((await db.enrichmentJobItem.findFirst({ where: { jobId: job.id } })).status, 'needs_review');
+      const usable = !['unknown-model', 'ambiguous-model'].includes(scenario);
+      assert.equal((await service.readEnrichment(book.id, false)).revisions.length, usable ? 1 : 0);
+      assert.equal((await db.enrichmentJobItem.findFirst({ where: { jobId: job.id } })).status, usable ? 'approved' : 'insufficient');
       if (!['unknown-model', 'ambiguous-model'].includes(scenario)) {
         await service.reviewEnrichment(book.id, { action: 'publish', revisionId: draft.id, identityConfirmed: true, overview: draft.overview, centralIdea: draft.centralIdea || '', concepts: draft.concepts.map(c => ({ id: c.id, name: c.proposedName, weight: c.weight, perspective: c.perspective || '', suppressed: false })) });
         const published = (await service.readEnrichment(book.id, false)).revisions[0]; assert.match(published.sourceLabel, /model knowledge/); assert.equal(published.olIdentityStatus, draft.olIdentityStatus); assert.equal(published.identityStatus, 'owner_confirmed');
