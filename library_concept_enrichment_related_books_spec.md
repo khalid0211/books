@@ -29,7 +29,7 @@ Add an opt-in enrichment process that produces useful, reviewable information ab
 3. **Separate evidence:** Keep Open Library descriptions distinct from LLM-generated narratives; store source type, timestamp, model and prompt version.
 4. **Concepts over keywords:** Normalize overlapping labels (e.g. `rapid cognition`, `intuitive judgement`) to canonical concepts while retaining original terms.
 5. **Explain recommendations:** Every automated related-book link must be traceable to one or more shared concepts; do not show opaque similarity alone.
-6. **Iterate:** Run a seven-book pilot, then 25–50 books, then process the remainder. Support resumable runs.
+6. **Iterate:** Run a selected catalogue range (initially up to ten books), then 25–50 books, then process the remainder. Support resumable runs.
 7. **Privacy and cost:** Send only catalogue metadata and optionally public descriptions to an approved cloud API. Make usage and spend visible.
 
 ## 3. User workflow
@@ -197,20 +197,13 @@ Adapt endpoints to the framework already in use. Cache derived relationships; in
 
 ## 10. Pilot and acceptance criteria
 
-Pilot titles:
-1. *The Soul of a New Machine* — Tracy Kidder
-2. *Blink* — Malcolm Gladwell
-3. *Jinnah of Pakistan* — Stanley Wolpert
-4. *War* (2024) — Bob Woodward
-5. *The Invisible Government* — David Wise and Thomas B. Ross
-6. *The World Is Flat* — Thomas L. Friedman
-7. *Thinking, Fast and Slow* — Daniel Kahneman
+Pilot: select actual catalogue books using an inclusive book-number range, initially `B0001`–`B0010`. Preview existing titles and skip missing IDs. Do not require a fixed list of external titles.
 
 **Acceptance tests**
-- All seven titles match the intended authors/works, including potentially ambiguous titles.
+- All selected catalogue titles match the intended authors/works, including potentially ambiguous titles.
 - Each model response validates against the JSON schema; failures are recoverable.
 - No description is treated as verified full-text evidence.
-- *Blink* and *Thinking, Fast and Slow* appear as high-quality reciprocal recommendations with a supported explanation.
+- Later related-book testing uses relevant pairs actually present in the selected catalogue sample, with supported shared-concept explanations; it does not require fixed titles.
 - Broader cross-topic connections are not misrepresented as strong merely because they share “leadership” or “technology.”
 - Missing or uncertain descriptions do not produce fabricated book claims.
 - Batch can resume without duplicate rows or losing manual edits.
@@ -219,7 +212,7 @@ Pilot titles:
 
 ## 11. Phased implementation
 
-**Phase A — Data & enrichment:** add schema, Open Library description retrieval, API enrichment, validation, provenance, and single-book screen. Test seven titles.
+**Phase A — Data & enrichment:** add schema, Open Library description retrieval, API enrichment, validation, provenance, and single-book screen. Test the selected catalogue range.
 
 **Phase B — Concepts & related books:** normalization, scoring, cached book links, recommendations UI and editorial controls. Test for false links.
 
@@ -233,7 +226,7 @@ Pilot titles:
 2. Propose a minimal migration and file-by-file implementation plan before writing code.
 3. Preserve all existing catalogue, search and import features.
 4. Add environment variables for API key, model, concurrency, per-run cap and budget; never hardcode secrets.
-5. Implement and test seven-book pilot first; present sample enriched JSON and related-book explanations for approval before bulk processing.
+5. Implement and test a selected catalogue range first (initially up to ten books); present sample enriched JSON and related-book explanations for approval before bulk processing.
 6. Add tests for ambiguous book identity, schema validation, API failures/rate limits, idempotency, manual locks, normalization, scoring, and empty states.
 7. Do not install Apache AGE during this milestone unless separately authorized.
 

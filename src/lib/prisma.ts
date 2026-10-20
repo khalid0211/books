@@ -8,4 +8,6 @@ export const prisma =
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Instrumentation and route bundles must share one client, including production:
+// restore disconnects this client before replacing the SQLite file.
+globalForPrisma.prisma = prisma;

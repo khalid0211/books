@@ -68,6 +68,8 @@ model BookOwner {
 }
 
 model Book {
+  enrichment BookEnrichment?
+  enrichmentItems EnrichmentJobItem[]
   loans Loan[]
   bookType String?
   categories Category[]
@@ -119,4 +121,122 @@ model Loan {
   reminderAttemptAt DateTime?
   reminderSentAt DateTime?
   @@index([returnedAt, dueAt])
+}
+
+model EnrichmentSettings {
+  id Int @id @default(1)
+  encryptedKey String?
+  model String @default("")
+  inputRate Float @default(0)
+  outputRate Float @default(0)
+  budgetUsd Float @default(1)
+  maxBooks Int @default(10)
+  updatedAt DateTime @updatedAt
+}
+
+model BookEnrichment {
+  bookId Int @id
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  manuallyLocked Boolean @default(false)
+  publishedRevisionId Int? @unique
+  publishedRevision BookEnrichmentRevision? @relation("PublishedRevision", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
+  revisions BookEnrichmentRevision[] @relation("EnrichmentRevisions")
+}
+
+model BookEnrichmentRevision {
+  id Int @id @default(autoincrement())
+  bookId Int
+  enrichment BookEnrichment @relation("EnrichmentRevisions", fields: [bookId], references: [bookId], onDelete: Cascade)
+  publishedFor BookEnrichment? @relation("PublishedRevision")
+  inputFingerprint String
+  inputSnapshot String
+  generatedOutput String @default("")
+  olWorkId String?
+  olEditionId String?
+  olDescription String?
+  olSourceUrl String?
+  sourceSnapshot String
+  identityStatus String
+  knowledgeLevel String
+  overview String?
+  centralIdea String?
+  limitations String
+  reviewStatus String @default("needs_review")
+  model String
+  promptVersion String
+  inputTokens Int @default(0)
+  outputTokens Int @default(0)
+  estimatedCostUsd Float @default(0)
+  createdAt DateTime @default(now())
+  editedAt DateTime?
+  concepts BookConcept[]
+  @@index([bookId, createdAt])
+}
+
+model Concept {
+  id Int @id @default(autoincrement())
+  name String
+  nameKey String @unique
+  aliases ConceptAlias[]
+  assignments BookConcept[]
+}
+
+model ConceptAlias {
+  nameKey String @id
+  conceptId Int
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+}
+
+model BookConcept {
+  id Int @id @default(autoincrement())
+  revisionId Int
+  revision BookEnrichmentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  conceptId Int?
+  concept Concept? @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  originalTerm String
+  proposedName String
+  weight Float
+  perspective String?
+  provenance String @default("llm_inferred")
+  reviewStatus String @default("proposed")
+  @@index([conceptId, revisionId])
+}
+
+model EnrichmentJob {
+  id Int @id @default(autoincrement())
+  startId Int
+  endId Int
+  regenerate Boolean @default(false)
+  status String @default("queued")
+  model String
+  inputRate Float
+  outputRate Float
+  budgetUsd Float
+  accountedUsd Float @default(0)
+  inputTokens Int @default(0)
+  outputTokens Int @default(0)
+  message String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items EnrichmentJobItem[]
+}
+
+model EnrichmentJobItem {
+  id Int @id @default(autoincrement())
+  jobId Int
+  job EnrichmentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  bookId Int
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  status String @default("queued")
+  attempts Int @default(0)
+  error String?
+  nextAttemptAt DateTime @default(now())
+  @@unique([jobId, bookId])
+  @@index([status, nextAttemptAt])
+}
+
+model EnrichmentWorkerLease {
+  id Int @id @default(1)
+  token String
+  expiresAt DateTime
 }

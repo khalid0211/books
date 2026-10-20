@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { authorize, OWNER } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { enrichmentBookFields } from "@/lib/enrichment/airtable";
+import { fingerprint } from "@/lib/enrichment/core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +51,15 @@ async function sync(token: string, baseId: string, table: string, rows: Row[]) {
     const fields = { ...item.fields, "Sync Hash": h, "Last Synced At": now };
     if (old) updated.push({ id: old.id, fields }); else created.push({ fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null)) });
   }
+  if (table === "Book Concepts") {
+    const present = new Set(rows.map(r => r.sourceId));
+    for (const [sourceId, old] of existing) {
+      if (present.has(sourceId)) continue;
+      const fields = { "Source ID": sourceId, Active: "false" };
+      const h = hash(fields);
+      if (old.hash !== h) updated.push({ id: old.id, fields: { ...fields, "Sync Hash": h, "Last Synced At": now } });
+    }
+  }
   const endpoint = api + "/" + encodeURIComponent(baseId) + "/" + encodeURIComponent(table);
   for (const records of batches(created)) { await request(token, endpoint, { method: "POST", body: JSON.stringify({ records }) }); await delay(); }
   for (const records of batches(updated)) { await request(token, endpoint, { method: "PATCH", body: JSON.stringify({ records }) }); await delay(); }
@@ -60,15 +71,19 @@ export async function POST(req: Request) {
   try {
     const token = process.env.AIRTABLE_TOKEN?.trim(), baseId = process.env.AIRTABLE_BASE_ID?.trim();
     if (!token || !baseId) throw new Error("Airtable is not configured. Add AIRTABLE_TOKEN and AIRTABLE_BASE_ID in Coolify.");
-    const [books, owners, categories, rooms, cabinets, shelves, users, loans] = await Promise.all([
-      prisma.book.findMany({ include: { owner: true, categories: { orderBy: { name: "asc" } } }, orderBy: { id: "asc" } }),
+    const [books, owners, categories, rooms, cabinets, shelves, users, loans, concepts, assignments] = await Promise.all([
+      prisma.book.findMany({ include: { owner: true, categories: { orderBy: { name: "asc" } }, enrichment: { include: { publishedRevision: { include: { concepts: { include: { concept: true } } } } } } }, orderBy: { id: "asc" } }),
       prisma.bookOwner.findMany({ orderBy: { id: "asc" } }), prisma.category.findMany({ orderBy: { id: "asc" } }),
       prisma.room.findMany({ orderBy: { id: "asc" } }), prisma.cabinet.findMany({ include: { room: true }, orderBy: { id: "asc" } }),
       prisma.shelf.findMany({ include: { cabinet: { include: { room: true } } }, orderBy: { id: "asc" } }),
-      prisma.user.findMany({ orderBy: { id: "asc" } }), prisma.loan.findMany({ include: { book: true, borrower: true }, orderBy: { id: "asc" } })
+      prisma.user.findMany({ orderBy: { id: "asc" } }), prisma.loan.findMany({ include: { book: true, borrower: true }, orderBy: { id: "asc" } }),
+      prisma.concept.findMany({ orderBy: { id: "asc" }, include: { aliases: { orderBy: { nameKey: "asc" } } } }),
+      prisma.bookConcept.findMany({ where: { conceptId: { not: null } }, include: { revision: { include: { enrichment: { include: { book: true } } } } }, orderBy: { id: "asc" } })
     ]);
     const data: Array<[string, Row[]]> = [
-      ["Books", books.map(b => row("Book", b.id, { "Book Number": value(b.id), Title: value(b.title), Authors: value(b.authors), "ISBN-10": value(b.isbn10), "ISBN-13": value(b.isbn13), Publisher: value(b.publisher), "Publication Date": value(b.publicationDate), Edition: value(b.edition), Language: value(b.language), "Page Count": value(b.pageCount), Tags: value(b.tags), Format: value(b.format), "Book Type": value(b.bookType), "Shelf Location": value(b.shelfLocation), "Date Acquired": value(b.dateAcquired), Price: value(b.price), Rating: value(b.rating), "Cover Image URL": value(b.coverImageUrl), Notes: value(b.notes), "Owner Source ID": b.owner ? "Owner:" + b.owner.id : null, "Owner Name": value(b.owner?.name), Categories: value(b.categories.map(c => c.name).join(", ")), "Created At": value(b.createdAt), "Updated At": value(b.updatedAt) }))],
+      ["Concepts", concepts.map(c => row("Concept", c.id, { Name: c.name, "Name Key": c.nameKey, Aliases: c.aliases.map(a => a.nameKey).join(", ") }))],
+      ["Book Concepts", assignments.map(c => row("BookConcept", c.id, { "Book Source ID": "Book:" + c.revision.bookId, "Concept Source ID": "Concept:" + c.conceptId, "Original Term": c.originalTerm, Weight: value(c.weight), Perspective: c.perspective, Provenance: c.provenance, "Review Status": c.reviewStatus, Active: String(c.reviewStatus === "approved" && c.revision.enrichment.publishedRevisionId === c.revisionId && c.revision.inputFingerprint === fingerprint(c.revision.enrichment.book)) }))],
+      ["Books", books.map(b => row("Book", b.id, { "Book Number": value(b.id), Title: value(b.title), Authors: value(b.authors), "ISBN-10": value(b.isbn10), "ISBN-13": value(b.isbn13), Publisher: value(b.publisher), "Publication Date": value(b.publicationDate), Edition: value(b.edition), Language: value(b.language), "Page Count": value(b.pageCount), Tags: value(b.tags), Format: value(b.format), "Book Type": value(b.bookType), "Shelf Location": value(b.shelfLocation), "Date Acquired": value(b.dateAcquired), Price: value(b.price), Rating: value(b.rating), "Cover Image URL": value(b.coverImageUrl), Notes: value(b.notes), "Owner Source ID": b.owner ? "Owner:" + b.owner.id : null, "Owner Name": value(b.owner?.name), Categories: value(b.categories.map(c => c.name).join(", ")), "Created At": value(b.createdAt), "Updated At": value(b.updatedAt), ...enrichmentBookFields(b) }))],
       ["Book Owners", owners.map(o => row("Owner", o.id, { "Owner Number": value(o.id), Name: value(o.name), "Name Key": value(o.nameKey) }))],
       ["Categories", categories.map(c => row("Category", c.id, { "Category Number": value(c.id), Name: value(c.name), "Name Key": value(c.nameKey) }))],
       ["Rooms", rooms.map(r => row("Room", r.id, { "Room Number": value(r.id), Name: value(r.name), Code: value(r.code) }))],

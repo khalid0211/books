@@ -18,6 +18,7 @@ const organization: Item[] = [
   { href: "/locations", label: "Locations", roles: ["OWNER", "LIBRARIAN"] },
 ];
 const administration: Item[] = [
+  { href: "/enrichment", label: "Enrich books", roles: ["OWNER"] },
   { href: "/database", label: "Backup & restore", roles: ["OWNER"] },
   { href: "/users", label: "Manage users", roles: ["OWNER"] },
 ];

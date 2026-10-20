@@ -53,13 +53,13 @@ export default function DatabaseManager() {
 
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
       <h2 className="text-xl font-semibold">Download backup</h2>
-      <p>Creates a consistent snapshot of the live VPS database and downloads it to this computer. The application can remain online.</p>
+      <p>Creates a consistent snapshot of the live database, including enrichment drafts, published information, concepts, jobs and encrypted API settings. Keep the server encryption secret separately. The application can remain online.</p>
       <a href="/api/database/backup" download className="inline-block rounded-lg bg-teal-700 px-4 py-3 font-medium text-white dark:bg-teal-300 dark:text-slate-950">Download database backup</a>
     </section>
 
     <section className="space-y-3 rounded-xl border border-sky-200 bg-white p-5 dark:border-sky-900 dark:bg-slate-800">
       <h2 className="text-xl font-semibold">Export to Airtable</h2>
-      <p>Sends new and changed records to Airtable. Unchanged records are skipped, and Airtable records are never deleted automatically.</p>
+      <p>Sends new and changed records to Airtable, including approved enrichment and concept mappings. Add the enrichment fields and Concepts / Book Concepts tables described in the README before exporting this version. Unchanged records are skipped, and Airtable records are never deleted automatically.</p>
       <button type="button" onClick={exportAirtable} disabled={exporting || restoring} className="rounded-lg bg-sky-700 px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-300 dark:text-slate-950">{exporting ? "Exporting..." : "Export new and changed data"}</button>
     </section>
     <section className="space-y-3 rounded-xl border border-red-200 bg-white p-5 dark:border-red-900 dark:bg-slate-800">

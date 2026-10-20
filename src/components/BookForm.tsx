@@ -15,6 +15,7 @@ import { cleanIsbn, isValidIsbn, type LookupResult } from "@/lib/isbn";
 import IsbnScanner from "@/components/IsbnScanner";
 import { flattenLocations } from "@/lib/locations";
 import ClassificationPicker from "@/components/ClassificationPicker";
+import BookEnrichmentPanel from "@/components/BookEnrichmentPanel";
 import { suggestClassification, type CategoryChoice, type Classification } from "@/lib/classification";
 
 type Props = { initial?: Book; canDelete?: boolean };
@@ -412,6 +413,7 @@ export default function BookForm({ initial, canDelete = false }: Props) {
           )}
         </div>
       </form>
+      {initial && <BookEnrichmentPanel bookId={initial.id} owner={canDelete} />}
     </div>
   );
 }

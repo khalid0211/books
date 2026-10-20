@@ -1,5 +1,99 @@
 # Book Catalog
 
+## AI enrichment of catalogue ranges
+
+The Owner can open **Enrich books** from the sidebar (or the phone account bar),
+save an OpenAI API key and model ID, and preview an inclusive range such as
+`B0001`–`B0010`. Missing book numbers are skipped. No requests are sent to OpenAI
+until **Start enrichment · uses paid OpenAI API** is clicked. The connection test
+checks key/model access without generating content. The first book checks actual
+Structured Outputs compatibility; incompatible models produce a recoverable error.
+
+Before enabling this feature:
+
+1. Back up the current database. Stop the local development server, run
+   `npm run db:push`, and restart. Coolify applies the schema after its normal
+   deployment backup. Existing catalogue fields and classifications are preserved.
+2. Generate a dedicated encryption secret with
+   `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
+   Set it as runtime `ENRICHMENT_SECRET` in Coolify or local `.env`. Keep a separate
+   secure copy: it is not included in database backups. Re-enter the API key if a
+   restored database uses a different encryption secret.
+3. On **Enrich books**, enter the key, a model supporting Responses API Structured
+   Outputs, current standard USD input/output prices per million tokens, run cap,
+   and maximum books (default 10, maximum 100). Prices are owner-maintained, not
+   automatically fetched. ChatGPT subscriptions do not pay for API usage.
+
+Processing uses the existing Open Library request queue, then OpenAI with only
+title, authors, ISBN, publication/edition/language metadata and a matched public
+description. Notes, reviews, owners, locations, borrowers and account details are
+not sent. Catalogue fields are never automatically replaced by enrichment.
+Identity ambiguity and missing descriptions remain explicit; model claims do not
+independently establish the identity of a book.
+
+The worker runs inside the single long-lived Next.js server; do not use a
+scale-to-zero/serverless host for background runs. SQLite stores jobs, attempts,
+errors and progress; a lease prevents concurrent workers. Runs interrupted by a
+restart are paused for manual resumption after lease expiry (up to three minutes).
+Set `ENRICHMENT_WORKER_ENABLED=false` to disable processing. Pausing/cancelling
+stops new requests; a request already underway may finish.
+
+Costs are estimates using the saved rates. Jobs snapshot model/rates/budget, reserve
+a conservative amount before every API attempt, and reconcile successful usage.
+Uncertain/failed requests retain their reservation. Retries therefore consume the
+run allowance too. The cap depends on the supplied prices and is not an OpenAI
+account billing limit. A budget-exhausted run stays paused; create a smaller new
+run or adjust settings for a new run. Already processed drafts are skipped unless
+regeneration is selected, and locked books are always skipped.
+
+Each generated result is a draft revision. Open the book form to inspect the
+Open Library description, AI overview, central idea/theme and concepts. The Owner
+can correct text, map concept names to canonical names, remember aliases, suppress
+concepts, and confirm identity before publishing. Publishing locks regeneration;
+unlock explicitly to obtain a new draft. Existing published information stays
+available while a new draft is reviewed. Other users see only the current published
+revision and approved concepts. Changing identity metadata makes the old enrichment
+stale and hides it from other users until regenerated. Concept importance and
+perspectives are stored now; related-book scoring is deferred.
+
+SQLite backups include settings (encrypted key only), drafts, published revisions,
+concepts and jobs. Restore validates and upgrades supported pre-enrichment backups
+in a temporary database before replacement, waits for enrichment to stop, retains
+the previous live database, and leaves restored jobs paused. Backups missing older
+required application tables remain unsupported. An upload requiring destructive
+schema changes is rejected by Prisma rather than force-applied.
+
+### Airtable fields for enrichment
+
+The existing export is one-way and never exports API credentials, settings, raw
+source payloads or job logs. Before exporting with this version, add these fields
+to the existing **Books** table. Use long text for descriptions and text for the
+other fields (dates are ISO strings):
+
+`AI Overview`, `Central Idea`, `Open Library Description`, `Open Library Source`,
+`Open Library Work ID`, `Open Library Edition ID`, `Enrichment Status`,
+`Enrichment Model`, `Enrichment Knowledge`, `Enriched At`, `Concepts`.
+
+Also create these two tables; all fields can be text, with long text for Perspective:
+
+| Table | Fields |
+| --- | --- |
+| Concepts | Source ID, Sync Hash, Last Synced At, Name, Name Key, Aliases |
+| Book Concepts | Source ID, Sync Hash, Last Synced At, Book Source ID, Concept Source ID, Original Term, Weight, Perspective, Provenance, Review Status, Active |
+
+Source references are stable text IDs, matching the current export convention.
+Only published, current-identity book content is exported onto Books; unpublishing
+or identity changes clear obsolete enrichment fields. Book Concepts includes
+canonical mappings with `Active` equal to the text `true` only for approved
+assignments on the current published revision. Historical/suppressed assignments
+and assignments removed since an earlier export are marked `false`. Filter on
+Active when using this data. Unchanged exports are skipped using Sync Hash.
+
+Run isolated verification with `npm run test:enrichment` (no live API calls).
+After `npm run build`, `npm run test:enrichment:http` also checks authenticated
+production routes, worker startup and actual backup/restore using a disposable
+database and localhost server; provider requests are prevented by a test lease.
+
 A tiny personal library CRUD app. One Next.js process serves both a REST/JSON
 API and a responsive UI — a table layout on desktop, a card + floating-button
 layout on the phone. Data lives in a single SQLite file via Prisma.

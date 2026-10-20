@@ -6,6 +6,9 @@ import { PrismaClient } from "@prisma/client";
 import { authorize, OWNER } from "@/lib/auth";
 import { backupTimestamp, databaseFilePath, databaseRestoreRunning, setDatabaseRestoreRunning, sqliteFileUrl } from "@/lib/database-file";
 import { prisma } from "@/lib/prisma";
+import { upgradeStagedBackup } from "@/lib/enrichment/restore";
+import { quiesceEnrichment, resetEnrichmentWorker } from "@/lib/enrichment/worker";
+import { EnrichmentError } from "@/lib/enrichment/core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +57,8 @@ export async function POST(req: Request) {
     if (!value.size || value.size > MAX_BACKUP_BYTES) return Response.json({ error: "The backup must be between 1 byte and 256 MB." }, { status: 413 });
     await writeFile(upload, Buffer.from(await value.arrayBuffer()), { flag: "wx" });
     await validateBackup(upload);
+    await upgradeStagedBackup(upload);
+    await quiesceEnrichment();
 
     const database = databaseFilePath();
     await mkdir(path.dirname(database), { recursive: true });
@@ -69,6 +74,8 @@ export async function POST(req: Request) {
       await Promise.all([rm(`${database}-wal`, { force: true }), rm(`${database}-shm`, { force: true }), rm(`${database}-journal`, { force: true })]);
       await prisma.$connect();
       await prisma.book.count();
+      await prisma.enrichmentSettings.findMany({ take: 1 });
+      resetEnrichmentWorker();
     } catch (error) {
       await rm(database, { force: true });
       await rename(previous, database);
@@ -77,7 +84,8 @@ export async function POST(req: Request) {
     }
     return Response.json({ message: "Database restored successfully. Sign in again if your session came from the replaced database.", safetyBackup: path.basename(previous) });
   } catch (error) {
-    console.error("Database restore failed", error);
+    console.error("Database restore failed; the live database was retained or rolled back.");
+    if (error instanceof EnrichmentError) return Response.json({ error: error.message }, { status: 409 });
     const message = error instanceof Error && /SQLite|integrity|required tables|not a SQLite/.test(error.message) ? error.message : "Could not restore the database. The existing database was kept.";
     return Response.json({ error: message }, { status: 400 });
   } finally {
