@@ -47,6 +47,7 @@ async function main() {
     for (const role of ['VIEW', 'LIBRARIAN']) { response = await request('/api/books', role); assert(!('enrichmentStatus' in (await response.json())[0])); }
     response = await request('/api/enrichment/preview', 'OWNER', { start: 'B0001', end: 'B0010' }); assert.equal(response.status, 200); const preview = await response.json(); assert.equal(preview.eligible, 1); assert.equal(preview.missing, 9);
     response = await request('/api/enrichment/jobs', 'OWNER', { start: 'B0001', end: 'B0010' }); assert.equal(response.status, 201); const job = await response.json();
+    assert.deepEqual(job.items[0].book, { id: book.id, title: book.title }, 'created run response must match the book detail shape used by the job list');
     assert.equal((await request('/api/enrichment/control', 'OWNER', { id: job.id, action: 'pause' })).status, 200);
     await db.enrichmentWorkerLease.deleteMany();
     let workerStarted = false;

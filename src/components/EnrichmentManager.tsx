@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { bookNumber } from "@/lib/books";
 type Settings = { model: string; inputRate: number; outputRate: number; budgetUsd: number; maxBooks: number; keySaved: boolean; keyUsable: boolean; encryptionReady: boolean };
 type Preview = { rows: { id: number; title: string; authors: string; eligible: boolean; reason: string }[]; eligible: number; missing: number; maxBooks: number; estimatedMaximumUsd: number; budgetUsd: number };
-type Job = { id: number; status: string; model: string; accountedUsd: number; budgetUsd: number; inputTokens: number; outputTokens: number; message: string | null; items: { id: number; status: string; attempts: number; error: string | null; book: { id: number; title: string } }[] };
+type Job = { id: number; status: string; model: string; accountedUsd: number; budgetUsd: number; inputTokens: number; outputTokens: number; message: string | null; items: { id: number; status: string; attempts: number; error: string | null; bookId: number; book?: { id: number; title: string } }[] };
 const input = "block w-full rounded-lg border border-slate-400 bg-transparent p-2";
 const button = "rounded-lg bg-teal-700 px-4 py-2 text-white disabled:opacity-50";
 function Spinner() { return <span aria-hidden="true" className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none" />; }
@@ -56,7 +56,7 @@ export default function EnrichmentManager() {
     </section>
     <section className="space-y-4"><h2 className="text-xl font-semibold">Recent runs</h2>{jobs.length === 0 && <p>No enrichment runs yet.</p>}{jobs.map(job => <article key={job.id} className="space-y-3 rounded-xl border p-4"><h3 className="font-semibold">Run {job.id} · {job.status} · {job.model}</h3><p>Accounted estimate ${job.accountedUsd.toFixed(4)} / ${job.budgetUsd.toFixed(2)} · {job.inputTokens} input / {job.outputTokens} output tokens</p>{job.message && <p>{job.message}</p>}
       <div className="flex flex-wrap gap-3">{(job.status === "queued" || job.status === "running" ? ["pause", "cancel"] : job.status === "paused" ? ["resume", "retry", "cancel"] : job.status === "completed" ? ["retry"] : []).map(action => <button key={action} disabled={busy} type="button" className="capitalize underline" onClick={() => void run(async () => { await api("control", { id: job.id, action }); await refreshJobs(); })}>{action === "retry" ? "Retry failures" : action}</button>)}</div>
-      <ul className="max-h-80 space-y-2 overflow-auto">{job.items.map(item => <li key={item.id}><Link href={`/books/${item.book.id}`} className="underline">{bookNumber(item.book.id)} · {item.book.title}</Link> · {item.status}{item.error && <p className="text-sm">{item.error}</p>}</li>)}</ul>
+      <ul className="max-h-80 space-y-2 overflow-auto">{job.items.map(item => <li key={item.id}><Link href={`/books/${item.book?.id ?? item.bookId}`} className="underline">{bookNumber(item.book?.id ?? item.bookId)} · {item.book?.title || "Book details loading…"}</Link> · {item.status}{item.error && <p className="text-sm">{item.error}</p>}</li>)}</ul>
     </article>)}</section>
   </main>;
 }

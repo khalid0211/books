@@ -50,7 +50,7 @@ export async function createJob(body: Record<string, unknown>) {
   return prisma.$transaction(async tx => {
     if (await tx.enrichmentJob.count({ where: { status: { in: ["queued", "running"] } } })) throw new EnrichmentError("Pause or finish the current run before starting another.");
     return tx.enrichmentJob.create({ data: { startId: preview.startId, endId: preview.endId, regenerate: body.regenerate === true, model: settings.model, inputRate: settings.inputRate, outputRate: settings.outputRate, budgetUsd: settings.budgetUsd,
-      items: { create: preview.rows.map(r => ({ bookId: r.id, status: r.eligible ? "queued" : "skipped", error: r.reason || null })) } }, include: { items: true } });
+      items: { create: preview.rows.map(r => ({ bookId: r.id, status: r.eligible ? "queued" : "skipped", error: r.reason || null })) } }, include: { items: { include: { book: { select: { id: true, title: true } } }, orderBy: { id: "asc" } } } });
   });
 }
 export async function controlJob(id: number, action: unknown) {

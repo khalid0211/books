@@ -92,6 +92,7 @@ test('catalogue range, draft generation, owner correction, publication, locking 
   const preview = await service.previewRange({ start: `B${a.id}`, end: `B${b.id}` }); assert.equal(preview.eligible, 2); assert.equal(preview.missing, 1);
   await assert.rejects(service.previewRange({ start: 'B10', end: 'B1' }), /inclusive range/);
   const job = await service.createJob({ start: `B${a.id}`, end: `B${b.id}` });
+  assert.deepEqual(job.items.map(item => item.book), [{ id: a.id, title: a.title }, { id: b.id, title: b.title }], 'newly queued runs must include book details for immediate client rendering');
   await assert.rejects(service.createJob({ start: `B${a.id}`, end: `B${b.id}` }), /current run/);
   await worker.processNextItem(); await worker.processNextItem(); await worker.processNextItem();
   assert.equal((await db.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'completed');
@@ -131,8 +132,10 @@ test('model-only fallback retains confident output without a source description,
     try {
       const calls = apiCalls;
       const job = await service.createJob({ start: String(book.id), end: String(book.id) });
+      // These manual worker ticks do not wait for the normal three-second poll.
+      await db.enrichmentJobItem.updateMany({ where: { jobId: job.id }, data: { nextAttemptAt: new Date(0) } });
       await worker.processNextItem(); await worker.processNextItem();
-      assert.equal(apiCalls, calls + 1, 'fallback uses one paid request, not a second call');
+      assert.equal(apiCalls, calls + 1, 'fallback uses one paid request, not a second call: ' + JSON.stringify(await db.enrichmentJobItem.findMany({ where: { jobId: job.id } })));
       const input = JSON.parse(outbound.input); assert.equal(input.enrichment_basis, 'ai_model_knowledge'); assert.equal(input.public_description, null); assert.equal(input.book.isbn13, '9781398541474');
       assert.match(outbound.instructions, /MODEL-KNOWLEDGE FALLBACK/); assert.match(outbound.instructions, /later paperback\/reprint date/);
       const draft = (await service.readEnrichment(book.id, true)).revisions[0];
