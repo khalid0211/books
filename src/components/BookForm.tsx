@@ -21,7 +21,7 @@ import { suggestClassification, type CategoryChoice, type Classification } from 
 
 type Props = { initial?: Book; canDelete?: boolean; returnTo?: string };
 
-const BOOK_TABS = [{ id: "details", label: "Book details" }, { id: "publication", label: "Publication & review" }, { id: "insights", label: "AI insights" }, { id: "related", label: "Related books" }] as const;
+const BOOK_TABS = [{ id: "details", label: "Book details" }, { id: "review", label: "Review" }, { id: "insights", label: "AI insights" }, { id: "related", label: "Related books" }] as const;
 type BookTab = typeof BOOK_TABS[number]["id"];
 
 const MAIN_FIELDS = ["title", "authors", "tags", "shelfLocation"];
@@ -271,12 +271,12 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
 
       <nav aria-label="Book sections" className="mb-5 overflow-x-auto border-b border-slate-200 dark:border-slate-700">
         <div role="tablist" aria-label="Book information" className="flex min-w-max gap-1">
-          {BOOK_TABS.filter(tab => initial || tab.id === "details" || tab.id === "publication").map(tab => <button
+          {BOOK_TABS.filter(tab => initial || tab.id === "details" || tab.id === "review").map(tab => <button
             key={tab.id} id={`book-tab-${tab.id}`} type="button" role="tab"
             aria-selected={activeTab === tab.id} aria-controls={`book-panel-${tab.id}`} tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={event => {
-              const tabs = BOOK_TABS.filter(t => initial || t.id === "details" || t.id === "publication");
+              const tabs = BOOK_TABS.filter(t => initial || t.id === "details" || t.id === "review");
               const index = tabs.findIndex(t => t.id === tab.id);
               const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index - 1 + tabs.length) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
               if (next !== null) { event.preventDefault(); setActiveTab(tabs[next].id); document.getElementById(`book-tab-${tabs[next].id}`)?.focus(); }
@@ -355,12 +355,20 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
         ))}
             </div>
           </section>
-        <div className="book-form-card space-y-3">
-          <ClassificationPicker categories={categories} value={classification} onChange={setClassification} disabled={saving} />
-          <Link href="/categories" target="_blank" rel="noopener noreferrer" className="inline-block text-sm underline">Manage categories (new tab)</Link>
-          {categoryError && <p role="alert" className="text-sm text-red-600">{categoryError}</p>}
-          {suggestion && <div className="rounded-xl border border-teal-300 bg-teal-50 p-4 text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"><p className="font-semibold">Suggested from book lookup</p><p className="mt-1">{[suggestion.bookType, ...categories.filter((c) => suggestion.categoryIds.includes(c.id)).map((c) => c.name)].filter(Boolean).join(" · ") || "No matching categories found. Choose manually above."}</p>{(suggestion.bookType || suggestion.categoryIds.length > 0) && <button type="button" disabled={saving} className="mt-3 rounded-lg border border-teal-600 px-3 py-2" onClick={() => { setClassification((value) => ({ bookType: value.bookType || suggestion.bookType, categoryIds: value.categoryIds.length ? value.categoryIds : suggestion.categoryIds })); setSubjects(null); }}>Use suggestions for empty fields</button>}<p className="mt-2 text-xs">Your existing selections are kept. Review before saving.</p></div>}
-        </div>
+        <section aria-labelledby="publication-heading" className="book-form-card">
+          <h2 id="publication-heading" className="font-semibold">Publication details</h2>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {FIELD_DEFS.filter((f) => DETAIL_FIELDS.includes(f.name)).map((f) => (
+              <Field
+                key={f.name}
+                def={f.name === "publicationDate" ? { ...f, label: "Publication year", type: "number", min: 1, max: 9999, step: "1" } : f}
+                value={f.name === "publicationDate" ? values[f.name].slice(0, 4) : values[f.name]}
+                onChange={(v) => set(f.name, v)}
+              />
+            ))}
+          </div>
+        </section>
+
           <section aria-labelledby="library-heading" className="book-form-card grid grid-cols-1 gap-5 sm:grid-cols-2">
             <h2 id="library-heading" className="font-semibold sm:col-span-2">In your library</h2>
         <div>
@@ -419,22 +427,8 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
             </aside>
           </div>
         </div>
-        <div id="book-panel-publication" role="tabpanel" aria-labelledby="book-tab-publication" data-book-tab="publication" hidden={activeTab !== "publication"}>
+        <div id="book-panel-review" role="tabpanel" aria-labelledby="book-tab-review" data-book-tab="review" hidden={activeTab !== "review"}>
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-        <section aria-labelledby="publication-heading" className="book-form-card">
-          <h2 id="publication-heading" className="font-semibold">Publication details</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {FIELD_DEFS.filter((f) => DETAIL_FIELDS.includes(f.name)).map((f) => (
-              <Field
-                key={f.name}
-                def={f.name === "publicationDate" ? { ...f, label: "Publication year", type: "number", min: 1, max: 9999, step: "1" } : f}
-                value={f.name === "publicationDate" ? values[f.name].slice(0, 4) : values[f.name]}
-                onChange={(v) => set(f.name, v)}
-              />
-            ))}
-          </div>
-        </section>
-
         <section className="book-form-card">
           <h2 className="font-semibold">Review &amp; purchase details</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -444,6 +438,13 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
             })}
           </div>
         </section>
+
+        <div className="book-form-card space-y-3">
+          <ClassificationPicker categories={categories} value={classification} onChange={setClassification} disabled={saving} />
+          <Link href="/categories" target="_blank" rel="noopener noreferrer" className="inline-block text-sm underline">Manage categories (new tab)</Link>
+          {categoryError && <p role="alert" className="text-sm text-red-600">{categoryError}</p>}
+          {suggestion && <div className="rounded-xl border border-teal-300 bg-teal-50 p-4 text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"><p className="font-semibold">Suggested from book lookup</p><p className="mt-1">{[suggestion.bookType, ...categories.filter((c) => suggestion.categoryIds.includes(c.id)).map((c) => c.name)].filter(Boolean).join(" · ") || "No matching categories found. Choose manually above."}</p>{(suggestion.bookType || suggestion.categoryIds.length > 0) && <button type="button" disabled={saving} className="mt-3 rounded-lg border border-teal-600 px-3 py-2" onClick={() => { setClassification((value) => ({ bookType: value.bookType || suggestion.bookType, categoryIds: value.categoryIds.length ? value.categoryIds : suggestion.categoryIds })); setSubjects(null); }}>Use suggestions for empty fields</button>}<p className="mt-2 text-xs">Your existing selections are kept. Review before saving.</p></div>}
+        </div>
 
           </div>
         </div>
