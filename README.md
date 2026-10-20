@@ -109,6 +109,23 @@ verified Open Library work, ISBN, or normalized title+author for corpus frequenc
 and recommendation diversity. Your own work/copies are excluded. Editorial aliases
 apply to existing and future assignments; no uncertain fuzzy concept merges occur.
 
+When exact canonical IDs do not establish a match, the app also compares the
+substantive words in differently named approved concepts using IDF-weighted
+cosine similarity. At least two shared topic words and a 0.12 similarity score
+are required. Near-identical multiword concept phrases provide additional
+evidence when a subject-heavy catalogue would otherwise dilute their IDF scores;
+the two-substantive-term requirement still applies. Common filler words and
+generic topic labels alone are excluded. This retrieval-only comparison handles word order, punctuation and simple plurals;
+it does not merge concepts, infer semantic synonyms or change editorial aliases.
+Topic matches display their actual overlapping words, rather than presenting
+different concepts as identical or inventing shared perspectives. The original
+canonical matching safeguards still apply to identical assignments.
+
+The Related books tab displays the number of distinct eligible works. Empty
+results distinguish missing/unpublished or stale source enrichment from a lack
+of usable concepts, no eligible comparison works, or insufficient topic overlap.
+No enrichment rerun, new database fields, or Airtable changes are required.
+
 At this catalogue size, similarity is calculated on demand from SQLite, without
 additional AI calls or a graph database. Changes to publication, concepts, identity
 or restored data take effect on the next request; no cached stale edges need

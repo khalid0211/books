@@ -124,3 +124,16 @@ test('pre-approval backups gain the new fields without losing existing enrichmen
   const upgraded = new PrismaClient({ datasources: { db: { url } } });
   try { assert.equal(await upgraded.book.count(), 1); assert.equal(await upgraded.bookEnrichmentRevision.count(), 1); const restored = await upgraded.bookEnrichmentRevision.findFirst(); assert.equal(restored.overview, 'Preserved overview'); assert.equal(restored.approvalSource, null); await upgraded.enrichmentJobItem.findMany(); } finally { await upgraded.$disconnect(); }
 });
+
+
+test('related diagnostics distinguish unpublished, stale and usable source enrichments', async () => {
+  const a = await seed(1), b = await seed(2, { entry: { manuallyLocked: true } });
+  await approveExistingEnrichments();
+  let result = await relatedBooks(b.book.id);
+  assert.equal(result.sourceStatus, 'unpublished'); assert.equal(result.sourceEligible, false); assert.equal(result.eligibleWorks, 1);
+  result = await relatedBooks(a.book.id); assert.equal(result.sourceStatus, 'ready'); assert.equal(result.comparedWorks, 0);
+  await db.book.update({ where: { id: a.book.id }, data: { title: 'Changed identity' } });
+  result = await relatedBooks(a.book.id); assert.equal(result.sourceStatus, 'stale'); assert.equal(result.eligibleWorks, 0);
+  const plain = await db.book.create({ data: { title: 'Not enriched', authors: '' } });
+  result = await relatedBooks(plain.id); assert.equal(result.sourceStatus, 'not_enriched');
+});

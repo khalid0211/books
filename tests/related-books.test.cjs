@@ -50,3 +50,31 @@ test('at most five distinct works are returned with stable scores and actual sav
   assert.equal(result.books[0].sharedConcepts[0].sourcePerspective, intuition.perspective);
   assert.equal(rankRelatedBooks(books, 1, 1).books.length, 1);
 });
+
+
+test('different concept names from the live Islamic history books produce topic matches without merging IDs', () => {
+  const a = ['Islamic civilization as a long historical arc', 'Geographic diversity of Muslim worlds', 'Political fragmentation and state formation', 'Intellectual and scholarly flourishing', 'Trade and cultural exchange', 'Modern decline and colonial disruption'].map((name, i) => concept(100 + i, name, [.96, .84, .73, .82, .68, .71][i]));
+  const b = ['Islamic Golden Age', 'Transmission of knowledge', 'Science and medicine', 'Cultural exchange', 'Correcting historical bias'].map((name, i) => concept(200 + i, name, [.92, .88, .84, .8, .82][i]));
+  const books = [book(3, a, { title: 'Lost Islamic History', authors: 'Firas Alkhateeb' }), book(10, b, { title: 'Lost History', authors: 'Michael Hamilton Morgan' }), ...Array.from({ length: 504 }, (_, i) => book(1000 + i, [concept(1000 + i, `Unrelatedtopic${i}`)]))];
+  const result = rankRelatedBooks(books, 3), reciprocal = rankRelatedBooks(books, 10);
+  assert.equal(result.books[0]?.id, 10); assert.equal(reciprocal.books[0]?.id, 3);
+  assert.equal(result.books[0].matchType, 'topic'); assert(result.books[0].matchedTerms.includes('islamic'));
+  assert(result.books[0].matchedTerms.includes('exchange'));
+  assert.deepEqual(result.books[0].sharedConcepts, [], 'related wording is not presented as an identical canonical concept');
+  assert.equal(a[0].id, 100); assert.equal(b[0].id, 200);
+  const subjectHeavy = [books[0], books[1], ...Array.from({ length: 504 }, (_, i) => book(1000 + i, [concept(1000 + i, i % 2 ? `Islamic subject${i}` : `Exchange subject${i}`)]))];
+  assert.equal(rankRelatedBooks(subjectHeavy, 3).books[0]?.id, 10, 'valid phrase overlap survives a subject-heavy library');
+
+});
+
+test('topic matching handles reordered phrases and plurals but rejects generic wording and a single incidental word', () => {
+  assert.equal(rankRelatedBooks([book(1, [concept(1, 'Nuclear weapons and deterrence')]), book(2, [concept(2, 'Deterrence of nuclear weapon use')])], 1).books[0]?.id, 2);
+  assert.deepEqual(rankRelatedBooks([book(1, [concept(1, 'Historical and political leadership')]), book(2, [concept(2, 'Political leadership in history')])], 1).books, []);
+  assert.deepEqual(rankRelatedBooks([book(1, [concept(1, 'Nuclear deterrence')]), book(2, [concept(2, 'Nuclear medicine')])], 1).books, []);
+  assert.deepEqual(rankRelatedBooks([book(1, [concept(1, 'Nuclear deterrence', .1)]), book(2, [concept(2, 'Deterrence of nuclear weapons')])], 1).books, []);
+});
+
+test('missing source reports eligible corpus size instead of falsely reporting an empty catalogue', () => {
+  const result = rankRelatedBooks([book(1, [intuition, bias]), book(2, [intuition, bias])], 99);
+  assert.equal(result.sourceEligible, false); assert.equal(result.eligibleWorks, 2); assert.deepEqual(result.books, []);
+});
