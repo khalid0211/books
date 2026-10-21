@@ -476,3 +476,18 @@ This feature adds the `Loan` table: back up the database, stop the local server,
 run `npm run db:push`, and restart. Coolify applies the schema during normal
 startup after its automatic backup. Backups predating this feature must have
 their schema upgraded before they can be restored through the app.
+
+## Enrichment run summaries
+
+On **Enrich books**, use **Save finished runs to summary** to move all completed
+and cancelled runs into the persistent summary sheet. It shows the run number,
+start date, input/output tokens, accounted USD estimate, and processed books,
+with totals across saved runs. Approved, needs-review, insufficient and failed
+results count as processed; skipped and unfinished books do not. Processing the
+same book in different runs counts each time. Saving again does not duplicate
+rows. Active and paused runs remain in recent runs, with book results collapsed.
+
+This adds summary fields to `EnrichmentJob`. For a local update, back up the
+database, stop the server, run `npm run db:push`, and restart. Coolify applies
+the schema during normal deployment. Database backup and restore retain saved
+summaries, including processed counts if catalogue books are later deleted.

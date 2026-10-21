@@ -225,6 +225,8 @@ model EnrichmentJob {
   inputTokens Int @default(0)
   outputTokens Int @default(0)
   message String?
+  summarySavedAt DateTime?
+  summaryBooksProcessed Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   items EnrichmentJobItem[]

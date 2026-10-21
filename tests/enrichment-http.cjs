@@ -34,9 +34,13 @@ async function main() {
       return fetch(origin + url, { redirect: 'manual', method: body === undefined ? 'GET' : 'POST', headers: { ...(role ? { cookie: 'book_session=' + sessions[role] } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json', Origin: foreign ? 'http://other.invalid' : origin }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     }
     assert.equal((await request('/api/enrichment/settings')).status, 401);
+    assert.equal((await request('/api/enrichment/summary')).status, 401);
+    assert.equal((await request('/api/enrichment/summary', undefined, {})).status, 401);
     assert.equal((await request(`/api/books/${book.id}/related`)).status, 401);
     for (const role of ['VIEW', 'LIBRARIAN']) {
       assert.equal((await request('/api/enrichment/settings', role)).status, 403);
+      assert.equal((await request('/api/enrichment/summary', role)).status, 403);
+      assert.equal((await request('/api/enrichment/summary', role, {})).status, 403);
       assert.equal((await request('/api/enrichment/preview', role, { start: 'B1', end: 'B10' })).status, 403);
       assert.equal((await request('/enrichment', role)).status, 307);
       assert.equal((await request(`/api/books/${book.id}/enrichment`, role, { action: 'lock', locked: true })).status, 403);
@@ -79,12 +83,20 @@ async function main() {
     for (const role of ['OWNER', 'LIBRARIAN', 'VIEW']) { response = await request(`/api/books/${book.id}/related`, role); assert.equal(response.status, 200); const related = await response.json(); assert.equal(related.sourceStatus, "ready"); assert.equal(related.sourceEligible, true); assert.equal(related.eligibleWorks, 2); assert.equal(related.comparedWorks, 1); assert.equal(related.books[0].id, second.id); assert.equal(related.books[0].sharedConcepts.length, 3); }
     assert.equal((await request(`/api/books/${book.id}/related?limit=99`, 'VIEW')).status, 400);
     assert.equal((await request('/api/books/999999/related', 'VIEW')).status, 404);
+    const finished = await db.enrichmentJob.create({ data: { startId: book.id, endId: second.id, status: 'completed', model: 'test-model', inputRate: 1, outputRate: 4, budgetUsd: 1, inputTokens: 100, outputTokens: 50, accountedUsd: .0123,
+      items: { create: [{ bookId: book.id, status: 'approved' }, { bookId: second.id, status: 'skipped' }] } } });
+    response = await request('/api/enrichment/summary', 'OWNER', {}); assert.equal(response.status, 200); assert.equal((await response.json()).saved, 1);
+    response = await request('/api/enrichment/summary', 'OWNER', {}); assert.equal((await response.json()).saved, 0);
+    response = await request('/api/enrichment/summary', 'OWNER'); const summary = await response.json();
+    assert.equal(summary.rows[0].id, finished.id); assert.equal(summary.totals.booksProcessed, 1); assert.equal(summary.totals.accountedUsd, .0123); assert.equal(summary.totals.inputTokens + summary.totals.outputTokens, 150);
+    response = await request('/api/enrichment/jobs', 'OWNER'); const recent = await response.json(); assert(!recent.some(row => row.id === finished.id)); assert(recent.some(row => row.id === job.id));
     // Owner backup endpoint includes every new table; restore exercises staging, session preservation and paused jobs.
     response = await request('/api/database/backup', 'OWNER'); assert.equal(response.status, 200); const bytes = await response.arrayBuffer(); assert(Buffer.from(bytes).subarray(0, 16).toString().startsWith('SQLite format 3'));
     const form = new FormData(); form.set('confirmation', 'RESTORE'); form.set('backup', new Blob([bytes]), 'catalogue.db');
     await db.$disconnect(); // Windows cannot replace a SQLite file held open by this test process.
     response = await fetch(origin + '/api/database/restore', { method: 'POST', headers: { cookie: 'book_session=' + sessions.OWNER, Origin: origin }, body: form }); assert.equal(response.status, 200, await response.clone().text());
     assert.equal((await db.enrichmentJob.findUnique({ where: { id: job.id } })).status, 'paused'); assert.equal(await db.book.count(), 2);
+    response = await request('/api/enrichment/summary', 'OWNER'); assert.deepEqual(await response.json(), summary, 'summary persists through backup and restore');
     response = await request(`/api/books/${book.id}/related`, 'VIEW'); assert.equal((await response.json()).books[0].id, second.id);
     response = await request(`/api/books/${second.id}/enrichment`, 'OWNER', { action: 'unpublish' }); assert.equal(response.status, 200);
     response = await request(`/api/books/${book.id}/related`, 'VIEW'); assert.deepEqual((await response.json()).books, []);

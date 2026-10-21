@@ -1,7 +1,7 @@
 import { authorize, OWNER } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { EnrichmentError, safeError } from "@/lib/enrichment/core";
-import { controlJob, createJob, previewRange, saveSettings, settingsPublic, usableSettings } from "@/lib/enrichment/service";
+import { controlJob, createJob, previewRange, readRunSummary, saveRunSummary, saveSettings, settingsPublic, usableSettings } from "@/lib/enrichment/service";
 import { approveExistingEnrichments } from "@/lib/enrichment/approval";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,8 @@ export async function GET(req: Request, { params }: Context) {
   const denied = await authorize(req, OWNER); if (denied) return denied;
   const { action } = await params;
   if (action === "settings") return Response.json(await settingsPublic(), { headers });
-  if (action === "jobs") return Response.json(await prisma.enrichmentJob.findMany({ orderBy: { id: "desc" }, take: 10, include: { items: { include: { book: { select: { id: true, title: true } } }, orderBy: { id: "asc" } } } }), { headers });
+  if (action === "summary") return Response.json(await readRunSummary(), { headers });
+  if (action === "jobs") return Response.json(await prisma.enrichmentJob.findMany({ where: { summarySavedAt: null }, orderBy: { id: "desc" }, take: 10, include: { items: { include: { book: { select: { id: true, title: true } } }, orderBy: { id: "asc" } } } }), { headers });
   return Response.json({ error: "Not found." }, { status: 404 });
 }
 export async function POST(req: Request, { params }: Context) {
@@ -23,6 +24,7 @@ export async function POST(req: Request, { params }: Context) {
     if (action === "settings") return Response.json(await saveSettings(body), { headers });
     if (action === "preview") return Response.json(await previewRange(body), { headers });
     if (action === "jobs") return Response.json(await createJob(body), { status: 201, headers });
+    if (action === "summary") return Response.json(await saveRunSummary(), { headers });
     if (action === "approve-existing") return Response.json(await approveExistingEnrichments(100, true), { headers });
     if (action === "control") {
       if (!Number.isSafeInteger(body.id) || body.id < 1) throw new EnrichmentError("Invalid run ID.");

@@ -387,3 +387,42 @@ test('not enriched batches select the requested count in catalogue order, exclud
     await assert.rejects(service.createJob({ selection: 'not_enriched', limit: 15 }), /eligible books/);
   } finally { await db.enrichmentSettings.update({ where: { id: 1 }, data: { maxBooks: 10 } }); }
 });
+
+test('summary persists all finished history once, excludes in-flight work, and keeps counts after book deletion', async () => {
+  await service.saveRunSummary();
+  const baseline = await service.readRunSummary();
+  const books = [];
+  for (let i = 0; i < 7; i++) books.push(await db.book.create({ data: baseBook }));
+  const make = (status, states) => db.enrichmentJob.create({ data: { startId: books[0].id, endId: books.at(-1).id, status, model: 'test-model', inputRate: 1, outputRate: 4, budgetUsd: 1,
+    inputTokens: 100, outputTokens: 50, accountedUsd: .0123, items: { create: states.map((status, i) => ({ bookId: books[i].id, status, attempts: status === 'failed' ? 1 : 0 })) } } });
+  const completed = await make('completed', ['approved', 'needs_review', 'insufficient', 'failed', 'skipped']);
+  const cancelled = await make('cancelled', ['approved', 'queued', 'skipped']);
+  const paused = await make('paused', ['approved', 'queued']);
+  const inFlight = await make('cancelled', ['running']);
+  const running = await make('running', ['queued']);
+  for (let i = 0; i < 11; i++) await make('completed', ['approved']);
+  assert.equal((await service.saveRunSummary()).saved, 13, 'saves beyond the ten recent runs');
+  assert.equal((await service.saveRunSummary()).saved, 0, 'double clicking must not duplicate totals');
+  let sheet = await service.readRunSummary();
+  assert.equal(sheet.rows.length, baseline.rows.length + 13);
+  assert.equal(sheet.totals.booksProcessed - baseline.totals.booksProcessed, 16);
+  assert.equal(sheet.totals.inputTokens - baseline.totals.inputTokens, 1300);
+  assert.equal(sheet.totals.outputTokens - baseline.totals.outputTokens, 650);
+  assert(Math.abs(sheet.totals.accountedUsd - baseline.totals.accountedUsd - 13 * .0123) < 1e-9);
+  for (const job of [paused, inFlight, running]) assert(!sheet.rows.some(row => row.id === job.id));
+  assert.equal(sheet.rows.find(row => row.id === completed.id).summaryBooksProcessed, 4);
+  assert.equal(sheet.rows.find(row => row.id === cancelled.id).summaryBooksProcessed, 1);
+  await db.book.delete({ where: { id: books[0].id } });
+  assert.equal((await service.readRunSummary()).totals.booksProcessed, sheet.totals.booksProcessed);
+  const backup = path.join(temp, 'summary.db'); await db.$executeRawUnsafe(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+  await upgradeStagedBackup(backup);
+  const restored = new PrismaClient({ datasources: { db: { url: `file:${backup.replace(/\\/g, '/')}` } } });
+  try {
+    const saved = await restored.enrichmentJob.findUnique({ where: { id: completed.id } });
+    assert(saved.summarySavedAt); assert.equal(saved.summaryBooksProcessed, 4);
+  } finally { await restored.$disconnect(); }
+  await service.controlJob(running.id, 'pause');
+  await service.controlJob(completed.id, 'retry');
+  assert(!(await service.readRunSummary()).rows.some(row => row.id === completed.id), 'retry returns the run to recent history until saved again');
+  assert.equal((await db.enrichmentJob.findUnique({ where: { id: completed.id } })).summarySavedAt, null);
+});

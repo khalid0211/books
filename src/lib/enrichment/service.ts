@@ -72,7 +72,29 @@ export async function controlJob(id: number, action: unknown) {
     if (job.status === "cancelled") throw new EnrichmentError("Create a new run for a cancelled range.");
     if (await tx.enrichmentJob.count({ where: { id: { not: id }, status: { in: ["queued", "running"] } } })) throw new EnrichmentError("Another run is active.");
     if (action === "retry") await tx.enrichmentJobItem.updateMany({ where: { jobId: id, status: "failed" }, data: { status: "queued", attempts: 0, error: null, nextAttemptAt: new Date() } });
-    return tx.enrichmentJob.update({ where: { id }, data: { status: "queued", message: null } });
+    return tx.enrichmentJob.update({ where: { id }, data: { status: "queued", message: null, summarySavedAt: null, summaryBooksProcessed: 0 } });
+  });
+}
+
+export async function readRunSummary() {
+  const rows = await prisma.enrichmentJob.findMany({ where: { summarySavedAt: { not: null } }, orderBy: { id: "asc" },
+    select: { id: true, createdAt: true, status: true, inputTokens: true, outputTokens: true, accountedUsd: true, summaryBooksProcessed: true } });
+  const totals = rows.reduce((sum, row) => ({ inputTokens: sum.inputTokens + row.inputTokens, outputTokens: sum.outputTokens + row.outputTokens,
+    accountedUsd: sum.accountedUsd + row.accountedUsd, booksProcessed: sum.booksProcessed + row.summaryBooksProcessed }),
+    { inputTokens: 0, outputTokens: 0, accountedUsd: 0, booksProcessed: 0 });
+  return { rows, totals };
+}
+
+export async function saveRunSummary() {
+  return prisma.$transaction(async tx => {
+    // Include all finished history, even runs older than the recent-runs display limit.
+    const jobs = await tx.enrichmentJob.findMany({ where: { summarySavedAt: null, status: { in: ["completed", "cancelled"] }, items: { none: { status: "running" } } },
+      select: { id: true, items: { select: { status: true } } } });
+    for (const job of jobs) {
+      const processed = job.items.filter(item => ["approved", "needs_review", "insufficient", "failed"].includes(item.status)).length;
+      await tx.enrichmentJob.update({ where: { id: job.id }, data: { summarySavedAt: new Date(), summaryBooksProcessed: processed } });
+    }
+    return { saved: jobs.length };
   });
 }
 export async function readEnrichment(bookId: number, owner: boolean) {
