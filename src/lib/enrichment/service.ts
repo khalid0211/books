@@ -29,10 +29,19 @@ export async function usableSettings() {
   return { ...s, key: decryptKey(s.encryptedKey) };
 }
 export async function previewRange(body: Record<string, unknown>) {
-  const startId = parseBookId(body.start), endId = parseBookId(body.end);
-  if (!startId || !endId || endId < startId || endId - startId >= 1000) throw new EnrichmentError("Enter an inclusive range of up to 1,000 book numbers, with the ending number at least the starting number.");
+  const selection = body.selection ?? "range";
+  if (selection !== "range" && selection !== "not_enriched") throw new EnrichmentError("Choose a catalogue range or not enriched books.");
   const s = await prisma.enrichmentSettings.findUnique({ where: { id: 1 } });
-  const books = await prisma.book.findMany({ where: { id: { gte: startId, lte: endId } }, include: { enrichment: { include: { revisions: { orderBy: { id: "desc" }, take: 1 } } } }, orderBy: { id: "asc" } });
+  const filtered = selection === "not_enriched";
+  let startId = parseBookId(body.start), endId = parseBookId(body.end);
+  if (filtered) {
+    if (!Number.isInteger(body.limit) || Number(body.limit) < 1 || Number(body.limit) > (s?.maxBooks ?? 10)) throw new EnrichmentError(`Enter a number of books from 1 to ${s?.maxBooks ?? 10}.`);
+  } else if (!startId || !endId || endId < startId || endId - startId >= 1000) throw new EnrichmentError("Enter an inclusive range of up to 1,000 book numbers, with the ending number at least the starting number.");
+  const books = await prisma.book.findMany({ where: filtered
+    ? { OR: [{ enrichment: { is: null } }, { enrichment: { is: { manuallyLocked: false, revisions: { none: {} } } } }] }
+    : { id: { gte: startId!, lte: endId! } },
+    ...(filtered ? { take: Number(body.limit) } : {}), include: { enrichment: { include: { revisions: { orderBy: { id: "desc" }, take: 1 } } } }, orderBy: { id: "asc" } });
+  if (filtered) { startId = books[0]?.id ?? 0; endId = books.at(-1)?.id ?? 0; }
   const rows = books.map(b => {
     const latest = b.enrichment?.revisions[0];
     const reason = b.enrichment?.manuallyLocked ? "Manually locked" : !body.regenerate && latest && latest.inputFingerprint === fingerprint(b) ? "Already processed; select regenerate to retry" : "";
@@ -41,7 +50,7 @@ export async function previewRange(body: Record<string, unknown>) {
   const eligible = rows.filter(r => r.eligible).length;
   const source = { identityStatus: "verified", workId: null, editionId: null, description: "x".repeat(10000), sourceUrl: null, snapshot: "" };
   const estimate = books.reduce((sum, b, i) => sum + (rows[i].eligible ? reserveFor(requestBody(b, source, s?.model || "configured-model"), { inputRate: s?.inputRate || 0, outputRate: s?.outputRate || 0 }).usd : 0), 0);
-  return { startId, endId, rows, missing: endId - startId + 1 - rows.length, eligible, maxBooks: s?.maxBooks ?? 10, estimatedMaximumUsd: estimate, budgetUsd: s?.budgetUsd ?? 1 };
+  return { startId: startId!, endId: endId!, rows, missing: filtered ? 0 : endId! - startId! + 1 - rows.length, eligible, maxBooks: s?.maxBooks ?? 10, estimatedMaximumUsd: estimate, budgetUsd: s?.budgetUsd ?? 1 };
 }
 export async function createJob(body: Record<string, unknown>) {
   const settings = await usableSettings(), preview = await previewRange(body);
@@ -49,7 +58,7 @@ export async function createJob(body: Record<string, unknown>) {
   if (preview.estimatedMaximumUsd > settings.budgetUsd) throw new EnrichmentError("The conservative first-attempt estimate exceeds the run budget. Reduce the range or increase the budget.");
   return prisma.$transaction(async tx => {
     if (await tx.enrichmentJob.count({ where: { status: { in: ["queued", "running"] } } })) throw new EnrichmentError("Pause or finish the current run before starting another.");
-    return tx.enrichmentJob.create({ data: { startId: preview.startId, endId: preview.endId, regenerate: body.regenerate === true, model: settings.model, inputRate: settings.inputRate, outputRate: settings.outputRate, budgetUsd: settings.budgetUsd,
+    return tx.enrichmentJob.create({ data: { startId: preview.startId, endId: preview.endId, regenerate: body.selection !== "not_enriched" && body.regenerate === true, model: settings.model, inputRate: settings.inputRate, outputRate: settings.outputRate, budgetUsd: settings.budgetUsd,
       items: { create: preview.rows.map(r => ({ bookId: r.id, status: r.eligible ? "queued" : "skipped", error: r.reason || null })) } }, include: { items: { include: { book: { select: { id: true, title: true } } }, orderBy: { id: "asc" } } } });
   });
 }

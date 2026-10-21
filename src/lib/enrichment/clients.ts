@@ -1,4 +1,4 @@
-import { queueOpenLibrary } from "../open-library-queue";
+import { deferOpenLibrary, queueOpenLibrary } from "../open-library-queue";
 import { cleanIsbn, isValidIsbn } from "../isbn";
 import { bookInput, EnrichmentError, identityMatches, MAX_OUTPUT_TOKENS, outputSchema, PROMPT_VERSION, validateOutput, type IdentityBook } from "./core";
 
@@ -7,12 +7,20 @@ export type Source = { identityStatus: string; workId: string | null; editionId:
 async function ol(path: string): Promise<RecordData | null> {
   if (!/^\/(?:isbn\/[0-9Xx]+|works\/OL\d+W|books\/OL\d+M|authors\/OL\d+A|search)\.json(?:\?.*)?$/.test(path)) throw new EnrichmentError("Invalid Open Library identifier.");
   for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await queueOpenLibrary(() => fetch(`https://openlibrary.org${path}`, { headers: { "User-Agent": "BookCatalog/0.1 (personal library enrichment)", Accept: "application/json" }, signal: AbortSignal.timeout(15000), cache: "no-store" })).catch(() => { throw new EnrichmentError("Open Library connection failed or timed out.", true, 30000); });
+    const response = await queueOpenLibrary(async () => {
+      const result = await fetch(`https://openlibrary.org${path}`, { headers: { "User-Agent": "BookCatalog/0.1 (personal library enrichment)", Accept: "application/json" }, signal: AbortSignal.timeout(15000), cache: "no-store" });
+      if (result.status === 429 || result.status >= 500) {
+        const header = result.headers.get("retry-after");
+        const seconds = header ? Number(header) : NaN;
+        const delay = Number.isFinite(seconds) ? seconds * 1000 : header ? Date.parse(header) - Date.now() : 0;
+        deferOpenLibrary(Math.max(result.status === 429 ? 10000 : 2000, Number.isFinite(delay) ? delay : 0));
+      }
+      return result;
+    }).catch(() => { throw new EnrichmentError("Open Library connection failed or timed out.", true, 30000); });
     if (response.status === 404) return null;
     if (response.ok) return response.json();
     if (response.status !== 429 && response.status < 500) throw new EnrichmentError(`Open Library returned HTTP ${response.status}.`);
-    if (attempt === 2) throw new EnrichmentError("Open Library is temporarily unavailable or rate limited.", true, 30000);
-    await new Promise(r => setTimeout(r, response.status === 429 ? 10000 : 2000));
+    if (attempt === 2) throw new EnrichmentError(`Open Library returned HTTP ${response.status} after 3 attempts (${response.status === 429 ? "rate limited" : "temporarily unavailable"}).`, true, 30000);
   }
   return null;
 }
@@ -24,6 +32,15 @@ function olId(value: unknown, type: "works" | "books") {
   return typeof value === "string" && new RegExp(`^/${type}/OL\\d+${type === "works" ? "W" : "M"}$`).test(value) ? value : null;
 }
 export async function retrieveSource(book: IdentityBook): Promise<Source> {
+  try { return await retrieveOpenLibrarySource(book); }
+  catch (error) {
+    if (!(error instanceof EnrichmentError) || !error.retryable) throw error;
+    // A temporary external lookup failure must not prevent the labelled model-knowledge fallback.
+    return { identityStatus: "unavailable", workId: null, editionId: null, description: null, sourceUrl: null,
+      snapshot: JSON.stringify({ lookupStatus: "unavailable", error: error.message }) };
+  }
+}
+async function retrieveOpenLibrarySource(book: IdentityBook): Promise<Source> {
   const isbn = cleanIsbn(book.isbn13 || book.isbn10 || "");
   let edition: RecordData | null = null, work: RecordData | null = null;
   let workId: string | null = null, editionId: string | null = null, matched = false;

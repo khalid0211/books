@@ -18,7 +18,8 @@ const { PrismaClient } = require('@prisma/client');
 const db = new PrismaClient();
 global.prisma = db;
 const queueFile = path.resolve('src/lib/open-library-queue.ts');
-require.cache[queueFile] = { exports: { queueOpenLibrary: async fn => fn() } };
+let cooldownDelays = [];
+require.cache[queueFile] = { exports: { queueOpenLibrary: async fn => fn(), deferOpenLibrary(delay) { cooldownDelays.push(delay); } } };
 const core = require('../src/lib/enrichment/core.ts');
 const clients = require('../src/lib/enrichment/clients.ts');
 const service = require('../src/lib/enrichment/service.ts');
@@ -155,6 +156,44 @@ test('model-only fallback retains confident output without a source description,
       }
     } finally { global.fetch = fakeFetch; responseOutput = output; }
   }
+});
+
+test('temporary Open Library errors use labelled model knowledge and retain diagnostic status', async () => {
+  for (const failure of [429, 503, 'timeout']) {
+    const book = await db.book.create({ data: baseBook });
+    let lookups = 0;
+    cooldownDelays = [];
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith('https://openlibrary.org/')) {
+        lookups++;
+        if (failure === 'timeout') throw Error('timeout');
+        const response = json({}, failure);
+        response.headers.set('Retry-After', '45');
+        return response;
+      }
+      const input = JSON.parse(JSON.parse(init.body).input);
+      assert.equal(input.open_library_identity, 'unavailable');
+      assert.equal(input.enrichment_basis, 'ai_model_knowledge');
+      assert.equal(input.public_description, null);
+      return fakeFetch(url, init);
+    };
+    try {
+      const calls = apiCalls;
+      const job = await service.createJob({ start: String(book.id), end: String(book.id) });
+      await worker.processNextItem(); await worker.processNextItem();
+      assert.equal(lookups, failure === 'timeout' ? 1 : 3);
+      assert.deepEqual(cooldownDelays, failure === 'timeout' ? [] : [45000, 45000, 45000]);
+      assert.equal(apiCalls, calls + 1);
+      assert.equal((await db.enrichmentJobItem.findFirst({ where: { jobId: job.id } })).status, 'approved');
+      const revision = await db.bookEnrichmentRevision.findFirst({ where: { bookId: book.id } });
+      assert.equal(revision.sourceType, 'ai_model_knowledge');
+      assert.equal(revision.olIdentityStatus, 'unavailable');
+      assert.match(JSON.parse(revision.sourceSnapshot).error, failure === 'timeout' ? /timed out/ : new RegExp('HTTP ' + failure));
+    } finally { global.fetch = fakeFetch; }
+  }
+  global.fetch = async () => json({}, 403);
+  try { await assert.rejects(clients.retrieveSource(baseBook), /HTTP 403/); }
+  finally { global.fetch = fakeFetch; }
 });
 
 test('legacy provenance labels are inferred without treating model identity as external verification', () => {
@@ -318,4 +357,33 @@ test('Airtable exports approved enrichment incrementally, clears unpublished fie
   assert(remote.get('Book Concepts').filter(r => r.fields['Book Source ID'] === 'Book:' + id).every(r => r.fields.Active === 'false'));
   const orphan = { id: 'recOrphan', fields: { 'Source ID': 'BookConcept:999999', 'Sync Hash': 'old', Active: 'true' } }; remote.get('Book Concepts').push(orphan);
   await exports.POST(new Request('http://localhost/api/database/airtable', { method: 'POST' })); assert.equal(orphan.fields.Active, 'false');
+});
+
+test('not enriched batches select the requested count in catalogue order, excluding revisions and locks', async () => {
+  await db.enrichmentSettings.update({ where: { id: 1 }, data: { maxBooks: 20 } });
+  const locked = await db.book.create({ data: { ...baseBook, enrichment: { create: { manuallyLocked: true } } } });
+  for (let i = 0; i < 17; i++) await db.book.create({ data: baseBook });
+  const expected = await db.book.findMany({ where: { OR: [{ enrichment: { is: null } }, { enrichment: { is: { manuallyLocked: false, revisions: { none: {} } } } }] }, orderBy: { id: 'asc' } });
+  try {
+    for (const limit of [10, 15]) {
+      const preview = await service.previewRange({ selection: 'not_enriched', limit });
+      assert.equal(preview.eligible, limit);
+      assert.equal(preview.missing, 0);
+      assert.deepEqual(preview.rows.map(r => r.id), expected.slice(0, limit).map(b => b.id));
+      assert(!preview.rows.some(r => r.id === locked.id));
+      for (const row of preview.rows) assert.equal(await db.bookEnrichmentRevision.count({ where: { bookId: row.id } }), 0);
+    }
+    for (const limit of [0, -1, 1.5, 21, '15', null]) await assert.rejects(service.previewRange({ selection: 'not_enriched', limit }), /number of books/);
+    await assert.rejects(service.previewRange({ selection: 'invalid', limit: 10 }), /Choose/);
+    const job = await service.createJob({ selection: 'not_enriched', limit: 15, regenerate: true });
+    assert.equal(job.regenerate, false);
+    assert.deepEqual(job.items.map(i => i.bookId), expected.slice(0, 15).map(b => b.id));
+    await service.controlJob(job.id, 'cancel');
+    // Fewer matches than requested are returned without including enriched books.
+    for (const book of expected.slice(2)) await db.bookEnrichment.upsert({ where: { bookId: book.id }, create: { bookId: book.id, manuallyLocked: true }, update: { manuallyLocked: true } });
+    assert.equal((await service.previewRange({ selection: 'not_enriched', limit: 15 })).eligible, 2);
+    for (const book of expected.slice(0, 2)) await db.bookEnrichment.upsert({ where: { bookId: book.id }, create: { bookId: book.id, manuallyLocked: true }, update: { manuallyLocked: true } });
+    assert.equal((await service.previewRange({ selection: 'not_enriched', limit: 15 })).eligible, 0);
+    await assert.rejects(service.createJob({ selection: 'not_enriched', limit: 15 }), /eligible books/);
+  } finally { await db.enrichmentSettings.update({ where: { id: 1 }, data: { maxBooks: 10 } }); }
 });

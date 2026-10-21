@@ -46,3 +46,23 @@ test('concurrent lookups wait a second after success or failure, including hot r
   assert.equal(await third, 'book');
   assert.deepEqual(starts, ['first', 'second', 'third']);
 });
+
+test('cooldown applies to subsequent requests across hot reload without shortening an existing delay', async () => {
+  const timers = [], starts = [];
+  let now = 1000;
+  const context = vm.createContext({ exports: {}, Date: { now: () => now }, setTimeout: (callback, delay) => timers.push({ callback, delay }) });
+  const code = ts.transpileModule(fs.readFileSync('src/lib/open-library-queue.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const load = () => { context.exports = {}; vm.runInContext(`(function () { ${code}\n })()`, context); return context.exports; };
+  const first = load();
+  first.deferOpenLibrary(30000);
+  first.deferOpenLibrary(10000);
+  const request = load().queueOpenLibrary(async () => { starts.push('request'); return 'ok'; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(starts, []);
+  assert.equal(timers[0].delay, 30000);
+  now += 30000;
+  timers.shift().callback();
+  assert.equal(await request, 'ok');
+  assert.deepEqual(starts, ['request']);
+  assert.equal(timers[0].delay, 1000);
+});

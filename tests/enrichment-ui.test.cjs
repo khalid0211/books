@@ -8,8 +8,8 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const code = ts.transpileModule(fs.readFileSync('src/components/EnrichmentManager.tsx', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
 }).outputText;
-function render(jobs, loaded = true) {
-  const values = [null, '', jobs, null, 'B0001', 'B0010', false, false, '', '', loaded, false];
+function render(jobs, loaded = true, selection = 'range', limit = '10') {
+  const values = [null, '', jobs, null, 'B0001', 'B0010', false, false, '', '', loaded, false, selection, limit];
   let index = 0, calls = 0;
   const exports = {};
   vm.runInNewContext(code, { exports, fetch: () => { calls++; throw Error('Unexpected request'); }, require: name => {
@@ -52,4 +52,15 @@ test('range submission stays blocked through running and in-flight pause/cancel,
     assert.equal(result.calls(), 0);
     assert.equal(result.html.includes('animate-spin'), disabled, status);
   }
+});
+
+test('not enriched filter offers an editable batch size and hides range/regeneration fields', () => {
+  const result = render([], true, 'not_enriched', '15');
+  assert.match(result.html, /Filter: Not enriched/);
+  assert.match(result.html, /Number of books to process/);
+  assert.match(result.html, /no enrichment revision/);
+  assert.equal(find(result.tree, n => n.type === 'input' && n.props.type === 'number').props.value, '15');
+  assert.equal(find(result.tree, n => n.type === 'input' && n.props.type === 'checkbox'), undefined);
+  assert.equal(find(result.tree, n => n.type === 'button' && n.props.children === 'Preview books').props.disabled, false);
+  assert.equal(find(render([job('running')], true, 'not_enriched').tree, n => n.type === 'input' && n.props.type === 'number').props.disabled, true);
 });
