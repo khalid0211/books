@@ -17,6 +17,7 @@ import { flattenLocations } from "@/lib/locations";
 import ClassificationPicker from "@/components/ClassificationPicker";
 import BookEnrichmentPanel from "@/components/BookEnrichmentPanel";
 import RelatedBooks from "@/components/RelatedBooks";
+import BookOverview from "@/components/BookOverview";
 import { suggestClassification, type CategoryChoice, type Classification } from "@/lib/classification";
 
 type Props = { initial?: Book; canDelete?: boolean; returnTo?: string };
@@ -251,17 +252,16 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
         <div className="min-w-0">
           <Link href={returnTo} className="text-sm text-slate-500 hover:text-teal-700 dark:hover:text-teal-300">‹ Back to catalogue</Link>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="text-lg font-semibold">{isEdit ? "Edit book" : "Add book"}</h1>
+            <h1 className="text-lg font-semibold">{isEdit ? "Book details" : "Add book"}</h1>
             {initial && <span className="rounded-md border border-slate-200 px-2 py-1 font-mono text-xs text-slate-500 dark:border-slate-700">{bookNumber(initial.id)}</span>}
           </div>
           {!initial && <p className="mt-1 text-xs text-slate-500">Book number assigned when saved</p>}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {initial && <Link href={`/books/${initial.id}/label`} className="hidden rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-white md:inline-block dark:border-slate-600 dark:hover:bg-slate-800">Print label</Link>}
+          {initial && <Link href={`/books/${initial.id}/label`} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-white dark:border-slate-600 dark:hover:bg-slate-800">Print label</Link>}
           <button type="submit" form="book-details-form" disabled={saving} className="hidden rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50 md:inline-block dark:bg-teal-300 dark:text-slate-950 dark:hover:bg-teal-200">{saving ? "Saving…" : isEdit ? "Save book details" : "Add book"}</button>
         </div>
       </header>
-      {initial && <Link href={`/books/${initial.id}/label`} className="mb-4 inline-block text-sm underline md:hidden">Print label</Link>}
 
       {error && (
         <p role="alert" className="mb-3 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
@@ -295,7 +295,9 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
       }}>
         <div id="book-panel-details" role="tabpanel" aria-labelledby="book-tab-details" data-book-tab="details" hidden={activeTab !== "details"}>
       {/* Find by ISBN */}
-      <div className="book-lookup mb-6 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+      <details className="mb-4 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800" open={!isEdit || undefined}>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">ISBN: {isbn || "Not recorded"}<span className="ml-3 text-xs font-normal text-slate-500">Look up or scan book details</span></summary>
+      <div className="book-lookup border-t border-slate-200 p-4 dark:border-slate-700">
         <div className="book-lookup-heading"><h2 className="mb-1 font-semibold">Find book details</h2>
         <label htmlFor="book-isbn" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
           ISBN (optional)
@@ -343,21 +345,24 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
         {lookupErr && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{lookupErr}</p>}
         {lookupNote && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{lookupNote}</p>}
       </div>
+      </details>
 
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
-            <div className="min-w-0 space-y-5">
+          {initial && <div className="mb-4 lg:hidden"><h2 className="text-xl font-semibold">{values.title}</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{values.authors}</p><p className="mt-2 text-xs text-teal-700 dark:text-teal-300">{[classification.bookType, values.shelfLocation, owners.find(owner => String(owner.id) === values.ownerId)?.name || initial.owner?.name].filter(Boolean).join(" · ")}</p></div>}
+          <div className="book-details-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-4">
           <section aria-labelledby="book-details-heading" className="book-form-card">
             <h2 id="book-details-heading" className="font-semibold">Book details</h2>
-            <p className="mb-5 mt-1 text-sm text-slate-500">Only the title is required.</p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {!initial && <p className="mt-1 text-sm text-slate-500">Only the title is required.</p>}
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {FIELD_DEFS.filter((f) => MAIN_FIELDS.includes(f.name) && f.name !== "shelfLocation").map((f) => (
-          <Field key={f.name} def={f} value={values[f.name]} onChange={(v) => set(f.name, v)} />
+          <Field key={f.name} def={{ ...f, half: f.name !== "title" }} value={values[f.name]} onChange={(v) => set(f.name, v)} />
         ))}
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="rounded-full bg-teal-50 px-2 py-1 text-teal-900 dark:bg-teal-950 dark:text-teal-100">{classification.bookType || "Unclassified"}</span>{classification.categoryIds.map(id => <span key={id} className="rounded-full border border-slate-200 px-2 py-1 dark:border-slate-700">{categories.find(c => c.id === id)?.name || initial?.categories?.find(c => c.id === id)?.name}</span>)}<button type="button" className="text-teal-700 underline dark:text-teal-300" onClick={() => setActiveTab("review")}>Edit classification</button></div>
           </section>
         <section aria-labelledby="publication-heading" className="book-form-card">
           <h2 id="publication-heading" className="font-semibold">Publication details</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {FIELD_DEFS.filter((f) => DETAIL_FIELDS.includes(f.name)).map((f) => (
               <Field
                 key={f.name}
@@ -369,7 +374,7 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
           </div>
         </section>
 
-          <section aria-labelledby="library-heading" className="book-form-card grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <section aria-labelledby="library-heading" className="book-form-card grid grid-cols-1 gap-3 sm:grid-cols-2">
             <h2 id="library-heading" className="font-semibold sm:col-span-2">In your library</h2>
         <div>
           <label className="block text-sm font-medium" htmlFor="book-location">Shelf location</label>
@@ -400,15 +405,17 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
         </div>
           </section>
             </div>
-            <aside aria-label="Book cover" className="min-w-0">
+            <aside aria-label="Book at a glance" className={`min-w-0 space-y-4 ${initial ? "order-first lg:order-none" : ""}`}>
           <section aria-labelledby="cover-heading" className="book-form-card">
-            <h2 id="cover-heading" className="mb-4 font-semibold">Book cover</h2>
+            <h2 id="cover-heading" className="mb-3 font-semibold">Cover &amp; rating</h2>
+            <div className="book-cover-rating">
+            <div>
         {values.coverImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={values.coverImageUrl}
             alt={values.title ? `Cover of ${values.title}` : "Cover preview"}
-            className="mx-auto max-h-56 max-w-full rounded-lg border border-slate-200 object-contain shadow-sm dark:border-slate-700"
+            className="mx-auto max-h-40 max-w-full rounded-lg border border-slate-200 object-contain shadow-sm dark:border-slate-700"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
@@ -417,6 +424,9 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
             }}
           />
         ) : <div className="flex h-32 items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-500 dark:bg-slate-900">No cover image</div>}
+            </div>
+            <Field def={FIELD_DEFS.find(f => f.name === "rating")!} value={values.rating} onChange={v => set("rating", v)} groupName="rating-details" />
+            </div>
         <details className="mt-3">
           <summary className="cursor-pointer text-sm font-medium">{values.coverImageUrl ? "Change cover" : "Add cover"}</summary>
           <div className="mt-2">
@@ -424,6 +434,8 @@ export default function BookForm({ initial, canDelete = false, returnTo = "/" }:
           </div>
         </details>
           </section>
+          {initial && <BookOverview bookId={initial.id} owner={canDelete} onOpenInsights={() => setActiveTab("insights")} />}
+          {values.notes && <section className="book-form-card"><div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Your review</h2><button type="button" onClick={() => setActiveTab("review")} className="text-sm text-teal-700 underline dark:text-teal-300">Read / edit review</button></div><p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed">{values.notes}</p></section>}
             </aside>
           </div>
         </div>
@@ -484,10 +496,12 @@ function Field({
   def,
   value,
   onChange,
+  groupName = "rating",
 }: {
   def: FieldDef;
   value: string;
   onChange: (v: string) => void;
+  groupName?: string;
 }) {
   const wrap = def.half ? "sm:col-span-1" : "sm:col-span-2";
   const inputClass =
@@ -502,7 +516,7 @@ function Field({
             <label key={rating} className="cursor-pointer">
               <input
                 type="radio"
-                name="rating"
+                name={groupName}
                 value={rating}
                 checked={Number(value) === rating}
                 onChange={() => onChange(String(rating))}

@@ -37,9 +37,11 @@ body { background: #f5f7f6; color: #13271f; -webkit-font-smoothing: antialiased;
   .catalog-table td:nth-child(4) { min-width: 220px; max-width: 360px; overflow-wrap: anywhere; }
   .catalog-table td:nth-child(5) { min-width: 140px; max-width: 240px; overflow-wrap: anywhere; }
   .catalog-table td:last-child a, .catalog-table td:last-child button { white-space: nowrap; text-decoration: none; }
-  .desktop-book-form > header { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+  .desktop-book-form > header { padding-top: .75rem; padding-bottom: .75rem; margin-bottom: 1rem; }
   .desktop-book-form h1 { font-size: 1.75rem; letter-spacing: -.025em; }
-  .desktop-book-form .book-form-card { padding: 1.5rem; }
+  .desktop-book-form .book-form-card { padding: 1rem; }
+  .desktop-book-form .book-form-card input:not([type="radio"]), .desktop-book-form .book-form-card select { padding-top: .5rem; padding-bottom: .5rem; min-height: 2.5rem; }
+  .desktop-book-form nav { margin-bottom: 1rem; }
   .desktop-book-form .book-form-header { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
 
   @media (prefers-color-scheme: dark) {
@@ -67,8 +69,13 @@ body { background: #f5f7f6; color: #13271f; -webkit-font-smoothing: antialiased;
 }
 .book-form-card > fieldset { border: 0; padding: 0; }
 .book-form-card input, .book-form-card select, .book-form-card textarea { min-width: 0; }
+.book-cover-rating { display: grid; grid-template-columns: minmax(0, 76px) minmax(0, 1fr); gap: .75rem; align-items: start; }
+.book-cover-rating > fieldset { grid-column: auto; min-width: 0; }
+.book-cover-rating fieldset label > span { width: 2rem; height: 2.75rem; font-size: 1.5rem; }
 .book-enrichment-layout > section + section { margin-top: 1.5rem; }
 @media (min-width: 1024px) {
+  .book-cover-rating { display: grid; grid-template-columns: minmax(0, 90px) minmax(0, 1fr); gap: .75rem; align-items: start; }
+  .book-cover-rating fieldset label > span { width: 2rem; height: 2.5rem; font-size: 1.5rem; }
   .book-lookup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); column-gap: 2rem; align-items: center; }
   .book-lookup > p, .book-lookup > [role="status"] { grid-column: 1 / -1; }
   .book-enrichment-layout > section { padding: 1.5rem; }

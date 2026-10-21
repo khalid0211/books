@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Book } from "@/lib/books";
 import { pubYear, bookNumber } from "@/lib/books";
 import { filterBooks } from "@/lib/book-filters";
 import Stars from "@/components/Stars";
 import { catalogueSearch, EMPTY_CATALOGUE_FILTERS, ENRICHMENT_LABELS, readCatalogueState } from "@/lib/catalogue-state";
+import { readCataloguePosition } from "@/lib/catalogue-position";
 
 const EMPTY_FILTERS = EMPTY_CATALOGUE_FILTERS;
 
@@ -23,9 +24,34 @@ export default function BookList({ canEdit = false, canDelete = false, storageKe
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [stateReady, setStateReady] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const catalogue = useRef<HTMLDivElement>(null), restoredFor = useRef<string | null>(null);
   const catalogueQuery = catalogueSearch({ query, sort, direction, filters, viewMode, density, filtersOpen });
   const catalogueHref = catalogueQuery ? `/?${catalogueQuery}` : "/";
   const bookHref = (id: number) => `/books/${id}?returnTo=${encodeURIComponent(catalogueHref)}`;
+  function rememberPosition() {
+    if (!stateReady || loading) return;
+    const table = catalogue.current?.querySelector<HTMLElement>(".catalog-table");
+    try { sessionStorage.setItem(`${storageKey}:position`, JSON.stringify({ query: catalogueQuery, windowY: window.scrollY, tableTop: table?.scrollTop ?? 0, tableLeft: table?.scrollLeft ?? 0 })); } catch {}
+  }
+  useEffect(() => {
+    if (!stateReady || loading) return;
+    let frame = 0;
+    if (restoredFor.current !== catalogueQuery) {
+      restoredFor.current = catalogueQuery;
+      let position = null;
+      try { position = readCataloguePosition(sessionStorage.getItem(`${storageKey}:position`), catalogueQuery); } catch {}
+      if (position) {
+        const saved = position;
+        // Wait until the fetched rows and restored filters have laid out before scrolling.
+        frame = requestAnimationFrame(() => {
+          const table = catalogue.current?.querySelector<HTMLElement>(".catalog-table");
+          if (table) { table.scrollTop = saved.tableTop; table.scrollLeft = saved.tableLeft; }
+          window.scrollTo({ top: saved.windowY, behavior: "instant" });
+        });
+      }
+    }
+    return () => cancelAnimationFrame(frame);
+  }, [stateReady, loading, catalogueQuery, storageKey]);
   useEffect(() => {
     let saved: string | null = null;
     try { saved = sessionStorage.getItem(storageKey); } catch { /* URL state still works if storage is blocked. */ }
@@ -98,7 +124,7 @@ export default function BookList({ canEdit = false, canDelete = false, storageKe
     { label: "Without owner", value: withoutOwner, kind: "owner" as const, note: "Ownership unassigned" },
   ];
 
-  return <div className="desktop-catalog mx-auto max-w-[1500px] px-4 pb-24 md:px-7 md:pb-10 lg:px-10">
+  return <div ref={catalogue} onClickCapture={event => { if ((event.target as HTMLElement).closest('a[href^="/books/"]')) rememberPosition(); }} className="desktop-catalog mx-auto max-w-[1500px] px-4 pb-24 md:px-7 md:pb-10 lg:px-10">
     <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:pb-2 md:pt-3 md:backdrop-blur-none dark:border-slate-800 dark:bg-slate-900/90 md:dark:bg-transparent">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="w-full md:w-auto"><p className="mb-1 hidden text-xs font-semibold uppercase tracking-[.16em] text-teal-700 md:block dark:text-teal-300">Collection workspace</p><h1 className="text-xl font-semibold tracking-tight md:text-3xl">Book Catalog</h1><p className="mt-1 hidden text-sm text-slate-500 md:block">Search, organize, and maintain your personal library.</p></div>
